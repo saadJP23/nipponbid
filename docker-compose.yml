@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: autobid_db
+    environment:
+      MYSQL_ROOT_PASSWORD: autobid_root
+      MYSQL_DATABASE: autobid
+      MYSQL_USER: autobid_user
+      MYSQL_PASSWORD: autobid_pass
+    ports:
+      - '3307:3306'
+    volumes:
+      - autobid_db_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      timeout: 10s
+      retries: 10
+
+  server:
+    build: ./server
+    container_name: autobid_server
+    environment:
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: autobid_user
+      DB_PASSWORD: autobid_pass
+      DB_NAME: autobid
+      JWT_SECRET: change_this_to_a_secure_secret_in_production
+      CLIENT_URL: http://localhost:5173
+    ports:
+      - '5002:5000'
+    volumes:
+      - ./server/uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    container_name: autobid_client
+    ports:
+      - '5173:80'
+    depends_on:
+      - server
+
+volumes:
+  autobid_db_data:

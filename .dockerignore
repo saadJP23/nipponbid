@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.claude
+stitch-designs
+server/node_modules
+server/uploads
+client/.vite
+*.md
+.DS_Store

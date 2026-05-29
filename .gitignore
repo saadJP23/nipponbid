@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Environment files (NEVER commit real credentials)
+.env
+.env.local
+.env.production
+server/.env
+server/.env.local
+server/.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# User uploads (binary files, not source code)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# macOS junk
+.DS_Store
+**/.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Vite cache
+.vite/
+client/.vite/
+
+# Claude Code settings (personal/machine-specific)
+.claude/
+
+# Design prototype files (not production code)
+stitch-designs/
+
+# Root-level utility scripts used during development only (not the server scraper scripts)
+/scripts/
+
+# Temporary files
+*.tmp
+*.temp
+coverage/
