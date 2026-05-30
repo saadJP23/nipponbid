@@ -335,4 +335,17 @@ router.post('/cleanup-cars', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+router.post('/run-scraper', adminAuth, (req, res) => {
+  const { spawn } = require('child_process');
+  const path = require('path');
+  const script = path.join(__dirname, '../scripts/shinchuoAgent.js');
+  const child = spawn(process.execPath, [script], {
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  });
+  child.unref();
+  res.json({ message: 'Scraper started in background' });
+});
+
 module.exports = router;
