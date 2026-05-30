@@ -14,7 +14,7 @@ import Register from './pages/Register'
 import CarDetail from './pages/CarDetail'
 
 import Dashboard from './pages/Dashboard'
-import Analytics from './pages/Analytics'
+import AnalyticsPage from './pages/Analytics'
 
 import JapaneseAuctions from './pages/JapaneseAuctions'
 import JapaneseCarDetail from './pages/JapaneseCarDetail'
@@ -94,7 +94,7 @@ export default function App() {
 
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
 
           <Route path="/japanese-auctions"      element={<JapaneseAuctions />} />
           <Route path="/japanese-auctions/:pid" element={<JapaneseCarDetail />} />
