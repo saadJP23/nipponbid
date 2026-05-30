@@ -22,6 +22,36 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+app.get('/api/image-proxy', async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).end();
+  // Local path — serve from disk if it exists
+  if (url.startsWith('/uploads/')) {
+    const fs = require('fs');
+    const localFile = path.join(__dirname, '..', url);
+    if (fs.existsSync(localFile)) return res.sendFile(localFile);
+    return res.status(404).end();
+  }
+  try {
+    const axios = require('axios');
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 10000,
+      headers: {
+        'Referer': 'https://www.shinchuo.jp/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+      validateStatus: s => s === 200,
+    });
+    res.set('Content-Type', response.headers['content-type'] || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(response.data));
+  } catch {
+    res.status(404).end();
+  }
+});
+
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/cars', require('./routes/cars'));
 app.use('/api/bids', require('./routes/bids'));

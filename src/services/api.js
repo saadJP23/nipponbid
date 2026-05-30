@@ -5,7 +5,10 @@ export const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export function resolveImageUrl(url) {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
+  // Local uploads path — proxy through backend (Render filesystem is ephemeral)
+  if (url.startsWith('/uploads/')) return `${API_BASE}/api/image-proxy?url=${encodeURIComponent(url)}`;
+  // External URL (Shinchuo CDN etc.) — proxy to bypass hotlink protection
+  if (url.startsWith('http')) return `${API_BASE}/api/image-proxy?url=${encodeURIComponent(url)}`;
   return `${API_BASE}${url}`;
 }
 

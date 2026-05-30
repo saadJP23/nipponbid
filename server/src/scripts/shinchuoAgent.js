@@ -431,10 +431,7 @@ async function run() {
       Object.assign(car, extra);
       await sleep(rand(400, 900));
     }
-    if (car.image_url) {
-      const localPath = await downloadImage(car.image_url, car.pid, session.ua, 'https://www.shinchuo.jp/');
-      if (localPath) car.image_url = localPath;
-    }
+    // Keep original source URL — images are proxied via /api/image-proxy
     batch.push(car);
     if (batch.length >= BATCH_SIZE) {
       await upsertBatch(batch);
