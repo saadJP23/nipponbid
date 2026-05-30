@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, Car, Globe, Shield, Gavel, Clock, Users, ChevronRight, Lock, Calendar, Flag } from 'lucide-react';
-import { getAuctions, getCars, getJapanFeatured } from '../services/api';
+import { getAuctions, getCars, getJapanFeatured, resolveImageUrl } from '../services/api';
 import CarCard from '../components/CarCard';
 import CountdownTimer from '../components/CountdownTimer';
 
@@ -225,7 +225,7 @@ export default function Home() {
                         <div className="relative aspect-[4/3] overflow-hidden" style={{ borderRadius: '1rem 1rem 0 0' }}>
                           {car.image_url ? (
                             <img
-                              src={car.image_url}
+                              src={resolveImageUrl(car.image_url)}
                               alt={`${car.make} ${car.model}`}
                               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                               style={{ filter: isBlurred ? 'blur(6px) brightness(0.4)' : undefined }}

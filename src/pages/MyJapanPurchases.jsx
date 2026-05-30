@@ -4,7 +4,7 @@ import {
   Car, Download, FileText, Trophy, Clock, X, ExternalLink,
   ChevronDown, ChevronUp, Package,
 } from 'lucide-react';
-import { getMyJapanPurchases, getMyJapanBids, downloadAccountExcel } from '../services/api';
+import { getMyJapanPurchases, getMyJapanBids, downloadAccountExcel, resolveImageUrl } from '../services/api';
 
 const fmt = (n) => n != null && n !== 0 ? Number(n).toLocaleString() : '—';
 const date = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
@@ -29,7 +29,7 @@ function PurchaseCard({ purchase }) {
       <button className="w-full text-left p-5 flex items-start gap-4" onClick={() => setOpen(o => !o)}>
         <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--ae-glass-bg)' }}>
           {purchase.image_url ? (
-            <img src={purchase.image_url?.startsWith('/') ? purchase.image_url : `${purchase.image_url}&w=200`} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display='none'} />
+            <img src={resolveImageUrl(purchase.image_url)} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display='none'} />
           ) : (
             <Car size={20} style={{ color: 'var(--ae-ink-faint)' }} />
           )}
@@ -132,7 +132,7 @@ function BidCard({ bid }) {
       className="card flex items-center gap-4 p-4 hover:bg-black/[0.02] transition-colors" style={{ borderRadius: '1rem' }}>
       <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--ae-glass-bg)' }}>
         {bid.image_url
-          ? <img src={bid.image_url?.startsWith('/') ? bid.image_url : `${bid.image_url}&w=200`} alt="" className="w-full h-full object-cover" onError={e=>e.target.style.display='none'} />
+          ? <img src={resolveImageUrl(bid.image_url)} alt="" className="w-full h-full object-cover" onError={e=>e.target.style.display='none'} />
           : <Car size={18} className="m-auto" style={{ color: 'var(--ae-ink-faint)' }} />}
       </div>
       <div className="flex-1 min-w-0">

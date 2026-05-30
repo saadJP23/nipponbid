@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { Analytics } from '@vercel/analytics/react'
 
 import Layout from './components/Layout'
 import Navbar from './components/Navbar'
@@ -133,6 +134,7 @@ export default function App() {
         <Route path="/admin/japan-purchases" element={<Navigate to="/admin/purchases" replace />} />
         <Route path="*"                      element={<Navigate to="/" replace />} />
       </Routes>
+      <Analytics />
     </AuthProvider>
   )
 }

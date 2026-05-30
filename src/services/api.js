@@ -1,6 +1,14 @@
 import axios from 'axios';
 import { normalizeDateField } from '../utils/dates.js';
 
+export const API_BASE = import.meta.env.VITE_API_URL || '';
+
+export function resolveImageUrl(url) {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE}${url}`;
+}
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
   headers: { 'Content-Type': 'application/json' },

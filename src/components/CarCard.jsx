@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { Gauge, Calendar, Tag, Heart } from 'lucide-react';
 import CountdownTimer from './CountdownTimer';
 import StatusBadge from './StatusBadge';
+import { resolveImageUrl } from '../services/api';
 
 export default function CarCard({ car, onWatchlist, isWatching }) {
-  const img = car.primary_image || null;
+  const img = resolveImageUrl(car.primary_image || car.image_url);
 
   return (
     <Link to={`/cars/${car.id}`} className="group block">

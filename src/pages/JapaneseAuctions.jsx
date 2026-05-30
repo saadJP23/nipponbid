@@ -4,7 +4,7 @@ import {
   Search, Filter, ChevronLeft, ChevronRight,
   Car, Calendar, Gauge, Zap, Star, FileText, X,
 } from 'lucide-react';
-import { getJapanCars, getJapanMakes, getJapanStats, getJapanDates } from '../services/api';
+import { getJapanCars, getJapanMakes, getJapanStats, getJapanDates, resolveImageUrl } from '../services/api';
 
 const AUCTION_HOUSES = ['USS', 'HAA', 'JAA', 'JU', 'TAA', 'CAA', 'BAYAUC', 'HERO'];
 const GRADES  = ['5', '4.5', '4', '3.5', '3', 'R', 'RA'];
@@ -31,7 +31,7 @@ function AuctionCarCard({ car, onSheet }) {
       <div className="relative overflow-hidden" style={{ aspectRatio: '16/10', background: 'var(--ae-glass-bg)' }}>
         {car.image_url && !imgError ? (
           <img
-            src={car.image_url?.startsWith('/') ? car.image_url : `${car.image_url}&w=480`}
+            src={resolveImageUrl(car.image_url)}
             alt={`${car.make} ${car.model}`}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             onError={() => setImgError(true)}

@@ -11,6 +11,7 @@ import {
   getBLRequests, createBLRequest, updateBLRequest, uploadBLDoc,
   getShipmentByFileCode, createShipment, updateShipment, uploadShipmentDoc,
   getAdminOthers, createAdminOther, updateAdminOther, deleteAdminOther,
+  resolveImageUrl,
 } from '../../services/api';
 import { format } from 'date-fns';
 import { toDateInputValue } from '../../utils/dates';
@@ -644,7 +645,7 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
             <div className="space-y-6">
               {purchase.image_url && (
                 <div className="w-full h-40 rounded-2xl overflow-hidden">
-                  <img src={purchase.image_url?.startsWith('/') ? purchase.image_url : `${purchase.image_url}&w=600`}
+                  <img src={resolveImageUrl(purchase.image_url)}
                     alt="" className="w-full h-full object-cover"
                     onError={e => e.target.parentElement.style.display = 'none'} />
                 </div>
@@ -819,7 +820,7 @@ export default function AdminJapanPurchases() {
     { label: 'Car',             render: (p) => (
       <div className="flex items-center gap-3">
         {p.image_url ? (
-          <img src={p.image_url?.startsWith('/') ? p.image_url : `${p.image_url}&w=80`} alt=""
+          <img src={resolveImageUrl(p.image_url)} alt=""
             className="w-10 h-8 rounded-lg object-cover shrink-0"
             onError={e => e.target.style.display = 'none'} />
         ) : (
