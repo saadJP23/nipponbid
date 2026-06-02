@@ -515,7 +515,7 @@ router.get('/purchases/my', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-async function buildAccountExcel(userName, purchases, remittances) {
+async function buildAccountExcel(userName, purchases, remittances, parts = []) {
   const wb = new ExcelJS.Workbook();
   wb.creator  = 'NipponBid';
   wb.modified = new Date();
@@ -1126,6 +1126,90 @@ async function buildAccountExcel(userName, purchases, remittances) {
     alignment: { horizontal: 'center', vertical: 'middle' },
   });
 
+  // ── Parts sheet ───────────────────────────────────────────────────────────
+  if (parts && parts.length > 0) {
+    const wp = wb.addWorksheet('Parts');
+    const P_COLS = [
+      { header: 'NO.',               width: 6  },
+      { header: 'PURCHASED DATE',    width: 16 },
+      { header: 'PARTICULAR',        width: 12 },
+      { header: 'ITEM',              width: 30 },
+      { header: 'DELIVERED TO',      width: 18 },
+      { header: 'PUT IN',            width: 10 },
+      { header: 'AUCTION ID',        width: 16 },
+      { header: 'DELIVERY COMPANY',  width: 18 },
+      { header: 'TRACKING NUMBER',   width: 22 },
+      { header: 'DELIVERY STATUS',   width: 16 },
+      { header: 'BID PRICE',         width: 12 },
+      { header: 'DELIVERY CHARGES',  width: 18 },
+      { header: 'BANK CHARGES',      width: 14 },
+      { header: 'COMMISION',         width: 12 },
+      { header: 'TOTAL',             width: 14 },
+    ];
+    P_COLS.forEach(({ width }, i) => { wp.getColumn(i + 1).width = width; });
+
+    const pHdr = wp.getRow(1);
+    pHdr.height = 28;
+    P_COLS.forEach(({ header }, i) => {
+      const cell = pHdr.getCell(i + 1);
+      cell.value     = header;
+      cell.font      = { name: 'Arial', size: 9, bold: true, color: { argb: C.white } };
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.navyDark } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border    = { bottom: { style: 'medium', color: { argb: 'FFFBBF24' } } };
+    });
+
+    let pSeq = 1;
+    parts.forEach((p, idx) => {
+      const row = wp.getRow(idx + 2);
+      row.height = 16;
+      row.values = [
+        pSeq++,
+        p.purchased_date ? fmtDate(p.purchased_date) : '',
+        p.particular || '',
+        p.item || '',
+        p.delivered_to || '',
+        p.put_in || '',
+        p.auction_id || '',
+        p.delivery_company || '',
+        p.tracking_number || '',
+        p.delivery_status || '',
+        p.bid_price       ? Number(p.bid_price)       : '',
+        p.delivery_charges? Number(p.delivery_charges): '',
+        p.bank_charges    ? Number(p.bank_charges)    : '',
+        p.commission      ? Number(p.commission)      : '',
+        p.total           ? Number(p.total)           : '',
+      ];
+      for (let c = 1; c <= 15; c++) {
+        const cell = row.getCell(c);
+        cell.font   = { name: 'Arial', size: 9, color: { argb: C.textDark } };
+        cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx % 2 === 0 ? C.white : C.rowAlt } };
+        cell.border = { top: hair(), bottom: hair(), left: thin(C.border), right: thin(C.border) };
+        cell.alignment = { vertical: 'middle' };
+        if (c >= 11) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+      }
+    });
+
+    // Totals row
+    const pTotRow = wp.getRow(parts.length + 2);
+    pTotRow.height = 24;
+    for (let c = 1; c <= 15; c++) {
+      pTotRow.getCell(c).fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.navyDark } };
+      pTotRow.getCell(c).font   = { name: 'Arial', size: 9, bold: true, color: { argb: C.white } };
+      pTotRow.getCell(c).border = { top: { style: 'medium', color: { argb: 'FFFBBF24' } } };
+    }
+    wp.mergeCells(`A${parts.length + 2}:J${parts.length + 2}`);
+    pTotRow.getCell(1).value     = 'TOTAL';
+    pTotRow.getCell(1).font      = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFBBF24' } };
+    pTotRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle', indent: 2 };
+    ['bid_price','delivery_charges','bank_charges','commission','total'].forEach((key, i) => {
+      const cell = pTotRow.getCell(11 + i);
+      cell.value  = parts.reduce((s, p) => s + (Number(p[key]) || 0), 0);
+      cell.numFmt = '#,##0';
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    });
+  }
+
   return wb;
 }
 
@@ -1142,8 +1226,12 @@ router.get('/purchases/account-excel', auth, async (req, res) => {
       `SELECT * FROM remittances WHERE user_id = ? AND status = 'confirmed' ORDER BY tt_date ASC`,
       [req.user.id],
     );
+    const [parts] = await db.query(
+      `SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC`,
+      [req.user.id],
+    );
 
-    const wb = await buildAccountExcel(user?.name, purchases, remittances);
+    const wb = await buildAccountExcel(user?.name, purchases, remittances, parts);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="nipponbid-account-${Date.now()}.xlsx"`);
     await wb.xlsx.write(res);
@@ -1192,7 +1280,11 @@ router.get('/purchases/account-excel-admin', adminAuth, async (req, res) => {
       `SELECT * FROM remittances WHERE user_id = ? AND status = 'confirmed' ORDER BY tt_date ASC`,
       [user_id],
     );
-    const wb = await buildAccountExcel(user.name, purchases, remittances);
+    const [parts] = await db.query(
+      `SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC`,
+      [user_id],
+    );
+    const wb = await buildAccountExcel(user.name, purchases, remittances, parts);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="account-${user.name.replace(/\s+/g,'-')}-${Date.now()}.xlsx"`);
     await wb.xlsx.write(res);

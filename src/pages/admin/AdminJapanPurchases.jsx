@@ -10,6 +10,7 @@ import {
   getAdminUsers, createManualJapanPurchase, uploadJapanCarImages,
   getBLRequests, createBLRequest, updateBLRequest, uploadBLDoc, deleteBLDoc,
   getAdminOthers, createAdminOther, updateAdminOther, deleteAdminOther,
+  getJapanPartsPurchases, deleteJapanPartsPurchase,
   resolveImageUrl,
 } from '../../services/api';
 import { format } from 'date-fns';
@@ -831,12 +832,15 @@ function ConfirmDeleteModal({ purchase, onConfirm, onCancel, deleting }) {
 }
 
 export default function AdminJapanPurchases() {
+  const [mainTab,     setMainTab]     = useState('purchases'); // 'purchases' | 'parts'
   const [purchases,   setPurchases]   = useState([]);
   const [total,       setTotal]       = useState(0);
   const [pages,       setPages]       = useState(1);
   const [page,        setPage]        = useState(1);
   const [users,       setUsers]       = useState([]);
   const [userFilter,  setUserFilter]  = useState('');
+  const [allParts,    setAllParts]    = useState([]);
+  const [partsLoading,setPartsLoading]= useState(false);
   const [loading,     setLoading]     = useState(true);
   const [selected,    setSelected]    = useState(null);
   const [creating,    setCreating]    = useState(false);
@@ -864,6 +868,18 @@ export default function AdminJapanPurchases() {
       .then(r => setUsers(r.data?.users || []))
       .catch(() => {});
   }, []);
+
+  const loadParts = useCallback(async () => {
+    setPartsLoading(true);
+    try {
+      const uid = userFilter || undefined;
+      const { data } = await getJapanPartsPurchases(uid ? { user_id: uid } : {});
+      setAllParts(data || []);
+    } catch { toast.error('Failed to load parts'); }
+    finally { setPartsLoading(false); }
+  }, [userFilter]);
+
+  useEffect(() => { if (mainTab === 'parts') loadParts(); }, [mainTab, loadParts]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -937,21 +953,32 @@ export default function AdminJapanPurchases() {
         <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold" style={{ color: 'var(--ae-ink)' }}>Japan Purchases</h1>
-            <p className="text-sm mt-1" style={{ color: 'var(--ae-ink-muted)' }}>
-              {total} purchase{total !== 1 ? 's' : ''} — tap any row to view &amp; edit
-            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-            <select className="input-field flex-1 sm:w-48 text-sm" value={userFilter} onChange={e => setUserFilter(e.target.value)}>
+            <select className="input-field flex-1 sm:w-48 text-sm" value={userFilter} onChange={e => { setUserFilter(e.target.value); setPage(1); }}>
               <option value="">All Clients</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
-            <button onClick={() => setCreating(true)} className="btn-gold flex items-center gap-2 whitespace-nowrap">
-              <Plus size={15} /> Add Purchase
-            </button>
+            {mainTab === 'purchases' && (
+              <button onClick={() => setCreating(true)} className="btn-gold flex items-center gap-2 whitespace-nowrap">
+                <Plus size={15} /> Add Purchase
+              </button>
+            )}
           </div>
         </div>
 
+        {/* Main tab switcher */}
+        <div className="flex gap-1 mb-6 rounded-full p-1 w-fit" style={{ background: 'var(--ae-glass-bg)', border: '1px solid var(--ae-glass-border)' }}>
+          {[{ id: 'purchases', label: 'Car Purchases' }, { id: 'parts', label: 'Parts' }].map(t => (
+            <button key={t.id} onClick={() => setMainTab(t.id)}
+              className="px-5 py-2 rounded-full text-sm font-medium transition-all"
+              style={mainTab === t.id ? { background: 'var(--ae-red)', color: '#fff' } : { color: 'var(--ae-ink-muted)' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {mainTab === 'purchases' ? (<>
         {loading ? (
           <div className="space-y-2">
             {[1,2,3,4,5].map(i => <div key={i} className="skeleton h-16 rounded-xl" />)}
@@ -997,6 +1024,60 @@ export default function AdminJapanPurchases() {
               <ChevronRight size={16} />
             </button>
           </div>
+        )}
+        </>) : (
+          /* ── Parts tab ─────────────────────────────────────────────────── */
+          partsLoading ? (
+            <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="skeleton h-14 rounded-xl" />)}</div>
+          ) : allParts.length === 0 ? (
+            <div className="card p-20 text-center">
+              <p style={{ color: 'var(--ae-ink-muted)' }}>No parts purchases found</p>
+            </div>
+          ) : (
+            <div className="card overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm min-w-[900px]">
+                <thead>
+                  <tr className="border-b text-xs uppercase" style={{ borderColor: 'var(--ae-glass-border)', color: 'var(--ae-ink-faint)' }}>
+                    {['Client','Date','Item','Auction ID','Delivery Co.','Tracking','Status','Bid Price','Del. Charges','Bank Chg','Commission','Total',''].map(h => (
+                      <th key={h} className="px-4 py-3 text-left whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allParts.map(p => {
+                    const userName = users.find(u => u.id === p.user_id)?.name || `User #${p.user_id}`;
+                    const statusColor = { DELIVERED:'#059669', delivered:'#059669', pending:'#d97706', shipped:'#2563eb' }[p.delivery_status] || '#64748b';
+                    return (
+                      <tr key={p.id} className="border-b hover:bg-black/[0.02]" style={{ borderColor: 'var(--ae-glass-border)' }}>
+                        <td className="px-4 py-3 text-xs font-medium" style={{ color: 'var(--ae-ink-muted)' }}>{userName}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--ae-ink-muted)' }}>{p.purchased_date ? new Date(p.purchased_date).toLocaleDateString('en-GB') : '—'}</td>
+                        <td className="px-4 py-3 text-sm font-medium max-w-[180px] truncate" style={{ color: 'var(--ae-ink)' }}>{p.item}</td>
+                        <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--ae-red)' }}>{p.auction_id || '—'}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--ae-ink-muted)' }}>{p.delivery_company || '—'}</td>
+                        <td className="px-4 py-3 text-xs font-mono" style={{ color: 'var(--ae-ink-muted)' }}>{p.tracking_number || '—'}</td>
+                        <td className="px-4 py-3">
+                          {p.delivery_status ? (
+                            <span className="text-xs px-2 py-0.5 rounded-full capitalize" style={{ background: `${statusColor}18`, color: statusColor }}>{p.delivery_status}</span>
+                          ) : <span style={{ color: 'var(--ae-ink-faint)' }}>—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.bid_price ? `¥${Number(p.bid_price).toLocaleString()}` : '—'}</td>
+                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.delivery_charges ? `¥${Number(p.delivery_charges).toLocaleString()}` : '—'}</td>
+                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.bank_charges ? `¥${Number(p.bank_charges).toLocaleString()}` : '—'}</td>
+                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.commission ? `¥${Number(p.commission).toLocaleString()}` : '—'}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-right" style={{ color: '#34d399' }}>{p.total ? `¥${Number(p.total).toLocaleString()}` : '—'}</td>
+                        <td className="px-4 py-3">
+                          <button onClick={async () => { if (!window.confirm('Delete this part?')) return; await deleteJapanPartsPurchase(p.id); loadParts(); toast.success('Deleted'); }}
+                            className="p-1.5 rounded-lg opacity-40 hover:opacity-100 transition-opacity" style={{ color: '#ef4444' }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
 
       </div>

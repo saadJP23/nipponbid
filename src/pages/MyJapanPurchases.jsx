@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Car, Download, FileText, Trophy, Clock, X, ExternalLink,
-  ChevronDown, ChevronUp, Package,
+  ChevronDown, ChevronUp, Package, Wrench,
 } from 'lucide-react';
-import { getMyJapanPurchases, getMyJapanBids, downloadAccountExcel, resolveImageUrl } from '../services/api';
+import { getMyJapanPurchases, getMyJapanBids, downloadAccountExcel, getJapanPartsPurchases, resolveImageUrl } from '../services/api';
 
 const fmt = (n) => n != null && n !== 0 ? Number(n).toLocaleString() : '—';
 const date = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
@@ -124,6 +124,77 @@ function PurchaseCard({ purchase }) {
   );
 }
 
+function PartCard({ part }) {
+  const [open, setOpen] = useState(false);
+  const statusColor = {
+    DELIVERED: '#059669', delivered: '#059669',
+    pending: '#d97706', shipped: '#2563eb',
+  }[part.delivery_status] || '#64748b';
+
+  return (
+    <div className="card overflow-hidden" style={{ borderRadius: '1.25rem' }}>
+      <button className="w-full text-left p-4 flex items-start gap-4" onClick={() => setOpen(o => !o)}>
+        <div className="w-12 h-12 rounded-xl shrink-0 flex items-center justify-center" style={{ background: 'var(--ae-glass-bg)' }}>
+          <Wrench size={18} style={{ color: 'var(--ae-ink-faint)' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate" style={{ color: 'var(--ae-ink)' }}>{part.item}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--ae-ink-muted)' }}>
+            {part.auction_id && <span className="font-mono mr-2">{part.auction_id}</span>}
+            {part.delivery_company && <span>{part.delivery_company}</span>}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--ae-ink-faint)' }}>{date(part.purchased_date)}</p>
+        </div>
+        <div className="text-right shrink-0 flex flex-col items-end gap-1">
+          {part.total > 0 && (
+            <p className="text-sm font-bold" style={{ color: 'var(--ae-red)' }}>¥{fmt(part.total)}</p>
+          )}
+          {part.delivery_status && (
+            <span className="text-xs px-2 py-0.5 rounded-full capitalize font-medium"
+              style={{ background: `${statusColor}18`, color: statusColor }}>
+              {part.delivery_status}
+            </span>
+          )}
+          {open ? <ChevronUp size={14} style={{ color: 'var(--ae-ink-faint)' }} />
+                : <ChevronDown size={14} style={{ color: 'var(--ae-ink-faint)' }} />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ borderTop: '1px solid var(--ae-glass-border)' }}>
+          <div className="pt-3">
+            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--ae-ink-faint)' }}>Cost Breakdown</p>
+            {[
+              { label: 'Bid Price',         value: part.bid_price },
+              { label: 'Delivery Charges',  value: part.delivery_charges },
+              { label: 'Bank Charges',      value: part.bank_charges },
+              { label: 'Commission',        value: part.commission },
+              { label: 'TOTAL',             value: part.total, bold: true },
+            ].map(r => r.value != null && <FinRow key={r.label} {...r} />)}
+          </div>
+          <div className="pt-3 space-y-1">
+            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--ae-ink-faint)' }}>Delivery Details</p>
+            {[
+              { label: 'Particular',         value: part.particular },
+              { label: 'Delivered To',       value: part.delivered_to },
+              { label: 'Put In',             value: part.put_in },
+              { label: 'Auction ID',         value: part.auction_id },
+              { label: 'Delivery Company',   value: part.delivery_company },
+              { label: 'Tracking No.',       value: part.tracking_number },
+              { label: 'Status',             value: part.delivery_status },
+            ].filter(r => r.value).map(({ label, value }) => (
+              <div key={label} className="flex gap-2 py-1" style={{ borderBottom: '1px solid var(--ae-glass-border)' }}>
+                <span className="text-xs w-32 shrink-0" style={{ color: 'var(--ae-ink-muted)' }}>{label}</span>
+                <span className="text-xs flex-1 font-mono" style={{ color: 'var(--ae-ink)' }}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BidCard({ bid }) {
   const statusColor = bid.status === 'pending' ? '#d97706' : bid.status === 'won' ? '#059669' : '#E11D2C';
   const StatusIcon  = bid.status === 'pending' ? Clock : bid.status === 'won' ? Trophy : X;
@@ -153,6 +224,7 @@ function BidCard({ bid }) {
 export default function MyJapanPurchases() {
   const [purchases, setPurchases] = useState([]);
   const [bids,      setBids]      = useState([]);
+  const [parts,     setParts]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [tab,       setTab]       = useState('purchases');
   const [exporting, setExporting] = useState(false);
@@ -162,10 +234,12 @@ export default function MyJapanPurchases() {
     Promise.all([
       getMyJapanPurchases().catch(() => ({ data: [] })),
       getMyJapanBids().catch(() => ({ data: [] })),
-    ]).then(([pRes, bRes]) => {
+      getJapanPartsPurchases().catch(() => ({ data: [] })),
+    ]).then(([pRes, bRes, partsRes]) => {
       const purchasePids = new Set((pRes.data || []).map(p => p.pid));
       setPurchases(pRes.data || []);
       setBids((bRes.data || []).filter(b => !purchasePids.has(b.pid) || b.status !== 'won'));
+      setParts(partsRes.data || []);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -211,9 +285,10 @@ export default function MyJapanPurchases() {
           </button>
         </div>
 
-        <div className="flex gap-1 mb-6 rounded-full p-1 w-fit" style={{ background: 'var(--ae-glass-bg)', border: '1px solid var(--ae-glass-border)' }}>
+        <div className="flex gap-1 mb-6 rounded-full p-1 w-fit flex-wrap" style={{ background: 'var(--ae-glass-bg)', border: '1px solid var(--ae-glass-border)' }}>
           {[
             { id: 'purchases', label: `Purchases (${purchases.length})` },
+            { id: 'parts',     label: `Parts (${parts.length})` },
             { id: 'bids',      label: `All Bids (${bids.length})` },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -240,6 +315,17 @@ export default function MyJapanPurchases() {
           ) : (
             <div className="space-y-4">
               {purchases.map(p => <PurchaseCard key={p.id} purchase={p} />)}
+            </div>
+          )
+        ) : tab === 'parts' ? (
+          parts.length === 0 ? (
+            <div className="text-center py-24">
+              <Wrench size={40} className="mx-auto mb-4" style={{ color: 'var(--ae-ink-faint)' }} />
+              <p className="text-sm" style={{ color: 'var(--ae-ink-muted)' }}>No parts purchases yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {parts.map(p => <PartCard key={p.id} part={p} />)}
             </div>
           )
         ) : (
