@@ -281,15 +281,12 @@ function ShipmentTab({ purchase }) {
   const [otherSaving,   setOtherSaving]  = useState(false);
   const [showOtherForm, setShowOtherForm] = useState(false);
 
-  // Stable auto-generated file code — created once per mount, not on every load
-  const autoFCRef = useRef(purchase.file_code || `FC-${purchase.id}-${Math.random().toString(36).slice(2,7).toUpperCase()}`);
-
   const loadBL = useCallback(async () => {
     try {
       const { data } = await getBLRequests({ purchase_id: purchase.id });
       const rec = Array.isArray(data) ? data[0] : null;
       setBl(rec || null);
-      const fc = rec?.file_code || purchase.file_code || autoFCRef.current;
+      const fc = rec?.file_code || purchase.file_code || '';
       setBlForm(rec ? {
         file_code: fc, chassis_number: rec.chassis_number || '',
         shipping_company: rec.shipping_company || '', ship_name: rec.ship_name || '',
@@ -391,8 +388,13 @@ function ShipmentTab({ purchase }) {
           <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--ae-ink-faint)' }}>BL Request</h3>
           {bl && <span className="badge-blue text-xs ml-auto">{bl.status}</span>}
         </div>
+        {!purchase.file_code && (
+          <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+            Save the File Code in the Details tab first — it will auto-fill here.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
-          <div><L>File Code</L><input className="input-field text-sm" {...bf('file_code')} /></div>
+          <div><L>File Code</L><input className="input-field text-sm" readOnly={!!purchase.file_code} {...bf('file_code')} style={purchase.file_code ? { opacity: 0.7, cursor: 'default' } : {}} /></div>
           <div><L>Chassis No.</L><input className="input-field text-sm" {...bf('chassis_number')} /></div>
           <div><L>Shipping Company</L><input className="input-field text-sm" {...bf('shipping_company')} /></div>
           <div><L>Ship Name</L><input className="input-field text-sm" {...bf('ship_name')} /></div>
@@ -550,6 +552,14 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
           init[key] = String(raw);
         }
       });
+      // Auto-generate if empty
+      if (!init.pro_invoice_no) {
+        const yr = new Date().getFullYear();
+        init.pro_invoice_no = `PRO-${yr}-${String(data.id).padStart(4, '0')}`;
+      }
+      if (!init.file_code) {
+        init.file_code = `FC-${data.id}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      }
       setForm(init);
     } catch { toast.error('Failed to load purchase'); }
   }, [purchaseId]);
