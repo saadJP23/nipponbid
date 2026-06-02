@@ -239,11 +239,13 @@ router.get('/bids/export', adminAuth, async (req, res) => {
               p.loading_custom, p.commission, p.tax_10pct, p.radiation_photos,
               p.custom_fee, p.freight, p.recycle, p.total,
               p.etd, p.ship_name, p.eta, p.route,
-              p.result_of_inspection, p.remarks, p.bl_status, p.shipping_company
+              p.result_of_inspection, p.remarks, p.bl_status, p.shipping_company,
+              s.bl_code
        FROM japan_bids b
        JOIN users u ON u.id = b.user_id
        JOIN japan_cars c ON c.pid = b.pid
        LEFT JOIN japan_purchases p ON p.bid_id = b.id
+       LEFT JOIN shipments s ON s.file_code = p.file_code
        WHERE ${where}
        ORDER BY c.auction_date ASC, b.created_at ASC`,
       params,
@@ -266,6 +268,7 @@ router.get('/bids/export', adminAuth, async (req, res) => {
       { header: 'DESTINATION',            key: 'destination',          width: 14 },
       { header: 'PRO-INVOICE NO.',        key: 'pro_invoice_no',       width: 16 },
       { header: 'FILE CODE NO',           key: 'file_code',            width: 13 },
+      { header: 'BL CODE',               key: 'bl_code',              width: 13 },
       { header: 'BID PRICE',              key: 'bid_price',            width: 12 },
       { header: 'AUCTION',                key: 'auction_fee',          width: 12 },
       { header: 'AUCTION COMMISSION',     key: 'auction_commission',   width: 18 },
@@ -316,6 +319,7 @@ router.get('/bids/export', adminAuth, async (req, res) => {
         r.destination || '',
         r.pro_invoice_no || '',
         r.file_code || '',
+        r.bl_code || '',
         fmtNum(r.bid_price),
         fmtNum(r.auction_fee),
         fmtNum(r.auction_commission),
@@ -352,11 +356,11 @@ router.get('/bids/export', adminAuth, async (req, res) => {
     if (rows.length) {
       const last = 1 + rows.length;
       const totRow = ws.addRow([
-        '', '', '', '', '', '', '', '', '', '', '', 'GRAND TOTAL',
-        `=SUM(M2:M${last})`, `=SUM(N2:N${last})`, `=SUM(O2:O${last})`,
-        `=SUM(P2:P${last})`, `=SUM(Q2:Q${last})`, `=SUM(R2:R${last})`,
-        `=SUM(S2:S${last})`, `=SUM(T2:T${last})`, `=SUM(U2:U${last})`,
-        `=SUM(V2:V${last})`, `=SUM(W2:W${last})`, `=SUM(X2:X${last})`,
+        '', '', '', '', '', '', '', '', '', '', '', '', 'GRAND TOTAL',
+        `=SUM(N2:N${last})`, `=SUM(O2:O${last})`, `=SUM(P2:P${last})`,
+        `=SUM(Q2:Q${last})`, `=SUM(R2:R${last})`, `=SUM(S2:S${last})`,
+        `=SUM(T2:T${last})`, `=SUM(U2:U${last})`, `=SUM(V2:V${last})`,
+        `=SUM(W2:W${last})`, `=SUM(X2:X${last})`, `=SUM(Y2:Y${last})`,
       ]);
       totRow.eachCell(cell => {
         cell.font = { bold: true, size: 9 };

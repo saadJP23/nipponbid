@@ -289,49 +289,57 @@ function ShipmentTab({ purchase }) {
   const [otherSaving,  setOtherSaving] = useState(false);
   const [showOtherForm, setShowOtherForm] = useState(false);
 
+  const genFileCode = () => `FC-${purchase.id}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+  const genBLCode   = () => `BLC-${purchase.id}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+
   const loadBL = useCallback(async () => {
     try {
       const { data } = await getBLRequests({ purchase_id: purchase.id });
       const rec = Array.isArray(data) ? data[0] : null;
       setBl(rec || null);
+      const autoFC = purchase.file_code || genFileCode();
       setBlForm(rec ? {
-        file_code: rec.file_code || '', chassis_number: rec.chassis_number || '',
+        file_code: rec.file_code || autoFC, chassis_number: rec.chassis_number || '',
         shipping_company: rec.shipping_company || '', ship_name: rec.ship_name || '',
-        voyage: rec.voyage || '', eto: toDateInputValue(rec.eto),
+        eto: toDateInputValue(rec.eto),
         eta: toDateInputValue(rec.eta),
         port_of_loading: rec.port_of_loading || '', port_of_discharge: rec.port_of_discharge || '',
         status: rec.status || 'pending',
       } : {
-        file_code: purchase.file_code || '', chassis_number: purchase.chassis || '',
+        file_code: autoFC, chassis_number: purchase.chassis || '',
         shipping_company: purchase.shipping_company || '', ship_name: purchase.ship_name || '',
-        voyage: '', eto: '', eta: toDateInputValue(purchase.eta),
+        eto: '', eta: toDateInputValue(purchase.eta),
         port_of_loading: '', port_of_discharge: purchase.destination || '',
         status: 'pending',
       });
     } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchase]);
 
   const loadVessel = useCallback(async () => {
-    if (!purchase.file_code) return;
     try {
-      const { data } = await getShipmentByFileCode(purchase.file_code);
+      const fc = purchase.file_code || null;
+      const data = fc ? (await getShipmentByFileCode(fc)).data : null;
       setVessel(data || null);
+      const autoFC = fc || genFileCode();
+      const autoBC = genBLCode();
       setVesselForm(data ? {
-        file_code: data.file_code || '', bl_code: data.bl_code || '',
+        file_code: data.file_code || autoFC, bl_code: data.bl_code || autoBC,
         ship_name: data.ship_name || '', shipping_company: data.shipping_company || '',
-        voyage: data.voyage || '', port_of_loading: data.port_of_loading || '',
+        port_of_loading: data.port_of_loading || '',
         port_of_discharge: data.port_of_discharge || '',
         etd: toDateInputValue(data.etd), eta: toDateInputValue(data.eta),
         status: data.status || 'pending', notes: data.notes || '',
       } : {
-        file_code: purchase.file_code || '', bl_code: '', ship_name: purchase.ship_name || '',
-        shipping_company: purchase.shipping_company || '', voyage: '',
+        file_code: autoFC, bl_code: autoBC, ship_name: purchase.ship_name || '',
+        shipping_company: purchase.shipping_company || '',
         port_of_loading: '', port_of_discharge: purchase.destination || '',
         etd: toDateInputValue(purchase.etd),
         eta: toDateInputValue(purchase.eta),
         status: 'pending', notes: '',
       });
     } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchase]);
 
   const loadOthers = useCallback(async () => {
@@ -358,11 +366,16 @@ function ShipmentTab({ purchase }) {
 
   
   const handleBLUpload = async (file) => {
-    if (!bl) { toast.error('Save the BL Request first'); return; }
     setBlUploading(true);
     try {
+      let blId = bl?.id;
+      if (!blId) {
+        const { data } = await createBLRequest({ ...blForm, purchase_id: purchase.id });
+        setBl(data);
+        blId = data.id;
+      }
       const fd = new FormData(); fd.append('file', file);
-      await uploadBLDoc(bl.id, fd);
+      await uploadBLDoc(blId, fd);
       toast.success('File attached');
       loadBL();
     } catch { toast.error('Upload failed'); }
@@ -387,11 +400,16 @@ function ShipmentTab({ purchase }) {
 
   
   const handleVesselUpload = async (file) => {
-    if (!vessel) { toast.error('Save the Vessel first'); return; }
     setVesselUploading(true);
     try {
+      let vesselId = vessel?.id;
+      if (!vesselId) {
+        const { data } = await createShipment(vesselForm);
+        setVessel(data);
+        vesselId = data.id;
+      }
       const fd = new FormData(); fd.append('file', file);
-      await uploadShipmentDoc(vessel.id, fd);
+      await uploadShipmentDoc(vesselId, fd);
       toast.success('File attached');
       loadVessel();
     } catch { toast.error('Upload failed'); }
@@ -441,7 +459,6 @@ function ShipmentTab({ purchase }) {
           <div><L>Chassis No.</L><input className="input-field text-sm" {...bf('chassis_number')} /></div>
           <div><L>Shipping Company</L><input className="input-field text-sm" {...bf('shipping_company')} /></div>
           <div><L>Ship Name</L><input className="input-field text-sm" {...bf('ship_name')} /></div>
-          <div><L>Voyage</L><input className="input-field text-sm" {...bf('voyage')} /></div>
           <div>
             <L>BL Status</L>
             <select className="select-field text-sm" {...bf('status')}>
@@ -576,8 +593,10 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
   const [docs,     setDocs]     = useState([]);
   const [saving,   setSaving]   = useState(false);
   const [uploading,setUploading]= useState(false);
+  const [imgUploading, setImgUploading] = useState(false);
   const [drawerTab, setDrawerTab] = useState('details');
   const fileRef = useRef();
+  const imgInputRef = useRef();
   useAutoCalc(form, setForm);
 
   const load = useCallback(async () => {
@@ -635,6 +654,22 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
       toast.success('Removed');
       load();
     } catch { toast.error('Failed'); }
+  };
+
+  const handleImageUpload = async (files) => {
+    if (!files?.length) return;
+    setImgUploading(true);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach(f => fd.append('images', f));
+      const { data } = await uploadJapanCarImages(fd);
+      const existing = purchase.image_url ? purchase.image_url.split(',').filter(Boolean) : [];
+      const combined = [...existing, ...data.urls].join(',');
+      await updateJapanPurchase(purchaseId, { ...purchase, ...form, image_url: combined });
+      toast.success('Images uploaded');
+      load();
+    } catch { toast.error('Image upload failed'); }
+    finally { setImgUploading(false); }
   };
 
   if (!purchase) {
@@ -696,17 +731,40 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
 
           {drawerTab === 'details' && (
             <div className="space-y-6">
-              {purchase.image_url && (() => {
-                const imgs = purchase.image_url.split(',').filter(Boolean);
-                return imgs.length > 0 && (
-                  <div className={`grid gap-2 ${imgs.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                    {imgs.map((url, i) => (
-                      <div key={i} className="rounded-xl overflow-hidden" style={{ aspectRatio: '4/3' }}>
-                        <img src={resolveImageUrl(url.trim())} alt=""
-                          className="w-full h-full object-cover"
-                          onError={e => e.target.parentElement.style.display = 'none'} />
+              {(() => {
+                const imgs = purchase.image_url ? purchase.image_url.split(',').filter(Boolean) : [];
+                const removeImg = async (idx) => {
+                  const updated = imgs.filter((_, i) => i !== idx).join(',');
+                  await updateJapanPurchase(purchaseId, { ...purchase, ...form, image_url: updated });
+                  load();
+                };
+                return (
+                  <div>
+                    {imgs.length > 0 && (
+                      <div className={`grid gap-2 mb-3 ${imgs.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                        {imgs.map((url, i) => (
+                          <div key={i} className="relative rounded-xl overflow-hidden" style={{ aspectRatio: '4/3' }}>
+                            <img src={resolveImageUrl(url.trim())} alt=""
+                              className="w-full h-full object-cover"
+                              onError={e => e.target.parentElement.style.display = 'none'} />
+                            <button onClick={() => removeImg(i)}
+                              className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 hover:bg-red-500 transition-colors"
+                              style={{ color: '#fff' }}>
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+                    <input ref={imgInputRef} type="file" accept="image/*" multiple className="hidden"
+                      onChange={e => handleImageUpload(e.target.files)} />
+                    <button type="button" disabled={imgUploading}
+                      onClick={() => imgInputRef.current?.click()}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border-2 border-dashed w-full justify-center hover:opacity-80 transition-opacity disabled:opacity-50"
+                      style={{ borderColor: 'var(--ae-glass-border)', color: 'var(--ae-ink-faint)' }}>
+                      <ImagePlus size={16} />
+                      {imgUploading ? 'Uploading…' : imgs.length > 0 ? 'Add More Images' : 'Upload Images'}
+                    </button>
                   </div>
                 );
               })()}
