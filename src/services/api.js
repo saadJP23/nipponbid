@@ -180,6 +180,7 @@ export const createManualJapanPurchase = (data) => api.post('/japan/purchases/ma
 export const uploadJapanCarImages = (formData) => api.post('/japan/purchases/upload-images', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const getMyJapanPurchases      = ()               => api.get('/japan/purchases/my');
 export const getJapanPartsPurchases   = (params)         => api.get('/japan/parts-purchases', { params });
+export const getJapanPartsPurchase    = (id)             => api.get(`/japan/parts-purchases/${id}`);
 export const createJapanPartsPurchase = (data)           => api.post('/japan/parts-purchases', data);
 export const updateJapanPartsPurchase = (id, data)       => api.put(`/japan/parts-purchases/${id}`, data);
 export const deleteJapanPartsPurchase = (id)             => api.delete(`/japan/parts-purchases/${id}`);

@@ -1458,12 +1458,33 @@ router.delete('/purchases/:id/documents/:docId', adminAuth, async (req, res) => 
 
 router.get('/parts-purchases', auth, async (req, res) => {
   try {
-    const userId = req.user.role === 'admin' && req.query.user_id ? req.query.user_id : req.user.id;
-    const [rows] = await db.query(
-      'SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC',
-      [userId]
-    );
+    let rows;
+    if (req.user.role === 'admin') {
+      if (req.query.user_id) {
+        [rows] = await db.query(
+          'SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC',
+          [req.query.user_id]
+        );
+      } else {
+        [rows] = await db.query(
+          'SELECT * FROM japan_parts_purchases ORDER BY purchased_date ASC, id ASC'
+        );
+      }
+    } else {
+      [rows] = await db.query(
+        'SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC',
+        [req.user.id]
+      );
+    }
     res.json(rows);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.get('/parts-purchases/:id', auth, async (req, res) => {
+  try {
+    const [[row]] = await db.query('SELECT * FROM japan_parts_purchases WHERE id=?', [req.params.id]);
+    if (!row) return res.status(404).json({ message: 'Not found' });
+    res.json(row);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
