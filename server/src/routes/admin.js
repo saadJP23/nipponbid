@@ -92,10 +92,23 @@ router.get('/stats', adminAuth, async (req, res) => {
     const [monthly_revenue] = await db.query(
       `SELECT DATE_FORMAT(c.auction_date, '%Y-%m') as month,
               COALESCE(SUM(COALESCE(sp.commission,0) + COALESCE(sp.auction_commission,0)), 0) as revenue,
+              COALESCE(SUM(sp.total), 0) as billed,
               COUNT(*) as sales
        ${MONTHLY_BASE}
        GROUP BY month ORDER BY month ASC`,
       monthlyP
+    );
+
+    // Monthly remittances received (last 12 months)
+    const [monthly_received] = await db.query(
+      `SELECT DATE_FORMAT(r.tt_date, '%Y-%m') as month,
+              COALESCE(SUM(r.deposit_amount), 0) as received,
+              COUNT(*) as payments
+       FROM remittances r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.status = 'confirmed'
+         AND r.tt_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
+       GROUP BY month ORDER BY month ASC`
     );
 
     const [recent_bids] = await db.query(
@@ -184,7 +197,7 @@ router.get('/stats', adminAuth, async (req, res) => {
                receivable_amount, total_billed: Number(total_billed), total_received: Number(total_received) },
       recent_bids,
       recent_purchases,
-      monthly_revenue,
+      monthly_revenue, monthly_received,
       bid_stats,
       in_transit,
       stock_by_make,

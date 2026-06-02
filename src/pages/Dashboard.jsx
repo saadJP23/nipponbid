@@ -113,47 +113,96 @@ function FinancialBar({ billed, received, receivable }) {
   )
 }
 
-function RevenueChart({ data, isFiltered }) {
-  const hasData = data && data.length > 0
-  const maxRevenue = hasData ? Math.max(...data.map(m => Number(m.revenue)), 1) : 1
-  const maxSales   = hasData ? Math.max(...data.map(m => Number(m.sales)), 1)   : 1
+function RevenueChart({ data, receivedData, isFiltered }) {
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const now = new Date()
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+    return { key, label: MONTHS[d.getMonth()], billed: 0, received: 0, commission: 0, sales: 0, payments: 0 }
+  })
+  if (data) data.forEach(d => {
+    const s = months.find(m => m.key === d.month)
+    if (s) { s.billed = Number(d.billed)||0; s.commission = Number(d.revenue)||0; s.sales = Number(d.sales)||0 }
+  })
+  if (receivedData) receivedData.forEach(d => {
+    const s = months.find(m => m.key === d.month)
+    if (s) { s.received = Number(d.received)||0; s.payments = Number(d.payments)||0 }
+  })
+
+  const peak = Math.max(...months.map(m => Math.max(m.billed, m.received)), 1)
+  const totalBilled   = months.reduce((s,m) => s + m.billed, 0)
+  const totalReceived = months.reduce((s,m) => s + m.received, 0)
+  const hasAny = months.some(m => m.billed > 0 || m.received > 0)
+
+  const fmt = n => n >= 1e6 ? `¥${(n/1e6).toFixed(1)}M` : n >= 1e3 ? `¥${(n/1e3).toFixed(0)}K` : `¥${n}`
 
   return (
     <div className="bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md">
-      <h3 className="text-headline-sm font-semibold text-primary mb-xs">Revenue by Month</h3>
-      <p className="text-label-sm text-on-surface-variant mb-md">
-        {isFiltered ? 'Filtered date range' : 'Last 12 months'} · commission per auction month
-      </p>
-      {!hasData ? (
-        <div className="h-40 flex items-center justify-center">
-          <p className="text-body-sm text-on-surface-variant">No revenue data for this period</p>
+      <div className="flex items-start justify-between mb-sm flex-wrap gap-2">
+        <div>
+          <h3 className="text-headline-sm font-semibold text-primary">Monthly Billed vs Received</h3>
+          <p className="text-label-sm text-on-surface-variant">{isFiltered ? 'Filtered range' : 'Last 12 months'} · purchase invoices vs payments in</p>
         </div>
+        <div className="flex gap-4 text-xs">
+          <div className="text-center">
+            <p className="font-bold" style={{ color:'#b7102a' }}>{fmtJpy(totalBilled)}</p>
+            <p className="text-on-surface-variant">Billed</p>
+          </div>
+          <div className="text-center">
+            <p className="font-bold" style={{ color:'#059669' }}>{fmtJpy(totalReceived)}</p>
+            <p className="text-on-surface-variant">Received</p>
+          </div>
+          <div className="text-center">
+            <p className="font-bold" style={{ color: totalBilled > totalReceived ? '#d97706':'#059669' }}>{fmtJpy(Math.abs(totalBilled - totalReceived))}</p>
+            <p className="text-on-surface-variant">{totalBilled > totalReceived ? 'Outstanding':'Surplus'}</p>
+          </div>
+        </div>
+      </div>
+
+      {!hasAny ? (
+        <div className="h-44 flex items-center justify-center"><p className="text-body-sm text-on-surface-variant">No data for this period</p></div>
       ) : (
         <>
-          <div className="flex items-end gap-1 h-40 mb-2">
-            {data.map(m => {
-              const h  = (Number(m.revenue) / maxRevenue) * 100
-              const sH = (Number(m.sales)   / maxSales)   * 100
+          <div className="flex items-end gap-1 h-44 mb-1">
+            {months.map((m, i) => {
+              const bH = m.billed   > 0 ? Math.max(4, (m.billed   / peak) * 100) : 0
+              const rH = m.received > 0 ? Math.max(4, (m.received / peak) * 100) : 0
+              const isLatest = i === months.length - 1
               return (
-                <div key={m.month} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-primary text-white rounded-lg px-2 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg">
-                    <p className="font-semibold">{fmtFull(m.revenue)}</p>
-                    <p className="text-white/70">{m.sales} car{m.sales !== 1 ? 's' : ''}</p>
+                <div key={m.key} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+                  {/* Tooltip */}
+                  {(m.billed > 0 || m.received > 0) && (
+                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 rounded-lg px-2.5 py-2 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl text-left"
+                      style={{ background:'#0F1729', color:'#fff', minWidth:130 }}>
+                      <p className="font-bold mb-0.5">{m.label} {m.key.slice(0,4)}</p>
+                      {m.billed > 0 && <p><span style={{color:'#fca5a5'}}>Billed: </span>{fmtJpy(m.billed)} ({m.sales} car{m.sales!==1?'s':''})</p>}
+                      {m.received > 0 && <p><span style={{color:'#6ee7b7'}}>Received: </span>{fmtJpy(m.received)} ({m.payments} pmt{m.payments!==1?'s':''})</p>}
+                      {m.billed > 0 && m.received > 0 && (
+                        <p className="mt-0.5 pt-0.5 border-t border-white/20">
+                          <span style={{color: m.billed>m.received?'#fbbf24':'#34d399'}}>
+                            {m.billed>m.received ? `Gap: -${fmtJpy(m.billed-m.received)}` : `Surplus: +${fmtJpy(m.received-m.billed)}`}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* Bars */}
+                  <div className="w-full flex items-end justify-center gap-[1px] h-full">
+                    <div className="flex-1 rounded-t transition-all duration-500" style={{ height:`${bH}%`, background: isLatest?'#b7102a':'#b7102a88', minHeight: m.billed>0?4:0 }} />
+                    <div className="flex-1 rounded-t transition-all duration-500" style={{ height:`${rH}%`, background: isLatest?'#059669':'#05966988', minHeight: m.received>0?4:0 }} />
                   </div>
-                  <div className="w-1 rounded-full bg-blue-300 opacity-60" style={{ height: `${Math.max(3, sH)}%` }} />
-                  <div className="w-full rounded-t bg-secondary/70 group-hover:bg-secondary transition-colors" style={{ height: `${Math.max(3, h)}%` }} />
-                  <span className="text-[9px] text-on-surface-variant mt-0.5">{m.month.slice(5)}</span>
+                  <span className={`text-[9px] leading-none mt-0.5 ${isLatest?'font-bold text-primary':'text-on-surface-variant'}`}>{m.label}</span>
                 </div>
               )
             })}
           </div>
-          <div className="flex justify-between text-label-sm text-on-surface-variant border-t border-outline-variant/30 pt-xs">
-            <span>0</span>
+          <div className="flex items-center justify-between text-label-sm text-on-surface-variant border-t border-outline-variant/30 pt-xs">
             <span className="flex gap-3">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-secondary/70 inline-block" /> Revenue</span>
-              <span className="flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-blue-300 inline-block" /> Cars sold</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#b7102a'}} /> Billed</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#059669'}} /> Received</span>
             </span>
-            <span>{fmtJpy(maxRevenue)}</span>
+            <span className="text-[10px]">Peak: {fmt(peak)}</span>
           </div>
         </>
       )}
@@ -715,7 +764,7 @@ export default function Dashboard() {
           </div>
 
           <div className="grid lg:grid-cols-2 gap-md mb-md">
-            <RevenueChart data={adminData.monthly_revenue} isFiltered={!!(applied.dateFrom || applied.dateTo)} />
+            <RevenueChart data={adminData.monthly_revenue} receivedData={adminData.monthly_received} isFiltered={!!(applied.dateFrom || applied.dateTo)} />
             <CommissionBreakdown customers={adminData.customer_summary} />
           </div>
 

@@ -11,82 +11,76 @@ function fmtJpy(n) {
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-function BarChart({ data }) {
+function BarChart({ data, receivedData }) {
   const now = new Date()
   const months = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    return { key, label: MONTH_NAMES[d.getMonth()], revenue: 0, sales: 0 }
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+    return { key, label: MONTH_NAMES[d.getMonth()], billed: 0, received: 0, commission: 0, sales: 0, payments: 0 }
+  })
+  if (data) data.forEach(d => {
+    const s = months.find(m => m.key === d.month)
+    if (s) { s.billed = Number(d.billed)||0; s.commission = Number(d.revenue)||0; s.sales = Number(d.sales)||0 }
+  })
+  if (receivedData) receivedData.forEach(d => {
+    const s = months.find(m => m.key === d.month)
+    if (s) { s.received = Number(d.received)||0; s.payments = Number(d.payments)||0 }
   })
 
-  if (data && data.length > 0) {
-    data.forEach(d => {
-      const slot = months.find(m => m.key === d.month)
-      if (slot) { slot.revenue = Number(d.revenue) || 0; slot.sales = Number(d.sales) || 0 }
-    })
-  }
-
-  const maxVal    = Math.max(...months.map(m => m.revenue), 1)
-  const hasAnyVal = months.some(m => m.revenue > 0)
-
-  const gridLines = [25, 50, 75, 100]
+  const peak   = Math.max(...months.map(m => Math.max(m.billed, m.received)), 1)
+  const hasAny = months.some(m => m.billed > 0 || m.received > 0)
+  const fmt    = n => n >= 1e6 ? `¥${(n/1e6).toFixed(1)}M` : n >= 1e3 ? `¥${(n/1e3).toFixed(0)}K` : `¥${n}`
 
   return (
     <div className="relative">
+      {/* Y-axis grid */}
       <div className="absolute inset-0 flex flex-col justify-between pointer-events-none" style={{ bottom: 28, top: 0 }}>
-        {gridLines.slice().reverse().map(g => (
+        {[100,75,50,25].map(g => (
           <div key={g} className="flex items-center gap-2 w-full">
-            <span className="text-[9px] text-on-surface-variant/50 w-10 text-right shrink-0">
-              {hasAnyVal ? fmtJpy((maxVal * g) / 100) : ''}
+            <span className="text-[9px] text-on-surface-variant/50 w-12 text-right shrink-0">
+              {hasAny ? fmt((peak * g) / 100) : ''}
             </span>
-            <div className="flex-1 border-t border-outline-variant/30 border-dashed" />
+            <div className="flex-1 border-t border-outline-variant/20 border-dashed" />
           </div>
         ))}
       </div>
 
-      <div className="flex items-end gap-[6px] h-[220px] pb-7 pl-12">
+      <div className="flex items-end gap-[5px] h-[220px] pb-7 pl-14">
         {months.map((m, i) => {
-          const isLatest  = i === months.length - 1
-          const hasRev    = m.revenue > 0
-          const barHeight = hasRev ? Math.max(6, Math.round((m.revenue / maxVal) * 100)) : 0
-
+          const isLatest = i === months.length - 1
+          const bH = m.billed   > 0 ? Math.max(4, (m.billed   / peak) * 180) : 0
+          const rH = m.received > 0 ? Math.max(4, (m.received / peak) * 180) : 0
           return (
-            <div key={m.key} className="flex-1 flex flex-col items-center justify-end gap-1 group h-full">
-              {hasRev && (
-                <div className="absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 bg-primary text-white rounded-lg px-2 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-lg text-center">
-                  <p className="font-bold">{fmtJpy(m.revenue)}</p>
-                  {m.sales > 0 && <p className="text-white/60">{m.sales} car{m.sales !== 1 ? 's' : ''}</p>}
+            <div key={m.key} className="flex-1 flex flex-col items-center justify-end gap-1 group h-full relative">
+              {(m.billed > 0 || m.received > 0) && (
+                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 rounded-lg px-2.5 py-2 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl"
+                  style={{ background:'#0F1729', color:'#fff', minWidth:130 }}>
+                  <p className="font-bold mb-0.5">{m.label} {m.key.slice(0,4)}</p>
+                  {m.billed   > 0 && <p><span style={{color:'#fca5a5'}}>Billed: </span>{fmtJpy(m.billed)} ({m.sales})</p>}
+                  {m.received > 0 && <p><span style={{color:'#6ee7b7'}}>Received: </span>{fmtJpy(m.received)}</p>}
+                  {m.commission > 0 && <p><span style={{color:'#fbbf24'}}>Commission: </span>{fmtJpy(m.commission)}</p>}
                 </div>
               )}
-
-              <div className="relative w-full flex items-end justify-end flex-1">
-                <div className="absolute bottom-0 w-full rounded-t bg-surface-container" style={{ height: '100%' }} />
-                {hasRev && (
-                  <div
-                    className="relative w-full rounded-t transition-all duration-500"
-                    style={{
-                      height: `${barHeight}%`,
-                      background: isLatest
-                        ? '#b7102a'
-                        : 'linear-gradient(to top, #0F1729cc, #457b9dcc)',
-                    }}
-                  />
-                )}
+              <div className="w-full flex items-end justify-center gap-[2px]" style={{ height: 180 }}>
+                <div className="flex-1 rounded-t transition-all duration-500" style={{ height:bH, background: isLatest?'#b7102a':'#b7102a77' }} />
+                <div className="flex-1 rounded-t transition-all duration-500" style={{ height:rH, background: isLatest?'#059669':'#05966977' }} />
               </div>
-
-              <span className={`text-[10px] leading-none ${isLatest ? 'text-secondary font-bold' : 'text-on-surface-variant'}`}>
-                {m.label}
-              </span>
+              <span className={`text-[10px] leading-none ${isLatest ? 'text-secondary font-bold' : 'text-on-surface-variant'}`}>{m.label}</span>
             </div>
           )
         })}
       </div>
 
-      {!hasAnyVal && (
+      {!hasAny && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-body-sm text-on-surface-variant">No revenue data yet</p>
+          <p className="text-body-sm text-on-surface-variant">No data yet</p>
         </div>
       )}
+
+      <div className="flex items-center gap-4 pl-14 mt-1 text-[11px] text-on-surface-variant">
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{background:'#b7102a'}} /> Billed</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{background:'#059669'}} /> Received</span>
+      </div>
     </div>
   )
 }
@@ -166,6 +160,7 @@ export default function Analytics() {
   const [loading, setLoading]  = useState(true)
   const [stats, setStats]      = useState(null)
   const [monthlyRev, setMonthlyRev] = useState([])
+  const [monthlyReceived, setMonthlyReceived] = useState([])
   const [stockMakes, setStockMakes] = useState([])
   const [winRateByHouse, setWinRateByHouse] = useState([])
   const [bidSummary, setBidSummary] = useState(null)
@@ -223,6 +218,7 @@ export default function Analytics() {
           const s = data.stats
           setStats(s)
           setMonthlyRev(data.monthly_revenue ?? [])
+          setMonthlyReceived(data.monthly_received ?? [])
           setStockMakes(data.stock_by_make   ?? [])
 
           const totalBids = (s.pending_bids ?? 0) + (s.won_bids ?? 0) + (s.lost_bids ?? 0)
@@ -371,13 +367,13 @@ export default function Analytics() {
         <div className="col-span-12 xl:col-span-7 bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md">
           <div className="flex justify-between items-center mb-md">
             <h3 className="text-headline-sm font-semibold text-primary">
-              {isAdmin ? 'Monthly Revenue' : 'Monthly Spending'}
+              {isAdmin ? 'Monthly Billed vs Received' : 'Monthly Spending'}
             </h3>
-            <span className="text-label-sm text-on-surface-variant">Last 12 months · ¥</span>
+            <span className="text-label-sm text-on-surface-variant">Last 12 months · hover for details</span>
           </div>
           {loading
             ? <div className="h-[180px] rounded skeleton" />
-            : <BarChart data={monthlyRev} />
+            : <BarChart data={monthlyRev} receivedData={monthlyReceived} />
           }
         </div>
 
