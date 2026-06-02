@@ -10,7 +10,7 @@ import {
   getAdminUsers, createManualJapanPurchase, uploadJapanCarImages,
   getBLRequests, createBLRequest, updateBLRequest, uploadBLDoc, deleteBLDoc,
   getAdminOthers, createAdminOther, updateAdminOther, deleteAdminOther,
-  getJapanPartsPurchases, deleteJapanPartsPurchase,
+  getJapanPartsPurchases, updateJapanPartsPurchase, deleteJapanPartsPurchase,
   resolveImageUrl,
 } from '../../services/api';
 import { format } from 'date-fns';
@@ -831,6 +831,156 @@ function ConfirmDeleteModal({ purchase, onConfirm, onCancel, deleting }) {
   );
 }
 
+const PART_STATUSES = ['pending','processing','shipped','delivered','DELIVERED','cancelled'];
+
+function PartDrawer({ partId, onClose, onSaved }) {
+  const [part,    setPart]    = useState(null);
+  const [form,    setForm]    = useState({});
+  const [saving,  setSaving]  = useState(false);
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await getJapanPartsPurchases();
+      const found = (Array.isArray(data) ? data : []).find(p => p.id === partId);
+      if (!found) return;
+      setPart(found);
+      setForm({
+        purchased_date:   found.purchased_date   ? found.purchased_date.slice(0,10) : '',
+        particular:       found.particular        || '',
+        item:             found.item              || '',
+        delivered_to:     found.delivered_to      || '',
+        put_in:           found.put_in            || '',
+        auction_id:       found.auction_id        || '',
+        delivery_company: found.delivery_company  || '',
+        tracking_number:  found.tracking_number   || '',
+        delivery_status:  found.delivery_status   || 'pending',
+        bid_price:        found.bid_price         ?? '',
+        delivery_charges: found.delivery_charges  ?? '',
+        bank_charges:     found.bank_charges      ?? '',
+        commission:       found.commission        ?? '',
+        total:            found.total             ?? '',
+      });
+    } catch { toast.error('Failed to load part'); }
+  }, [partId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Auto-calc total
+  useEffect(() => {
+    const t = (Number(form.bid_price)||0) + (Number(form.delivery_charges)||0) +
+              (Number(form.bank_charges)||0) + (Number(form.commission)||0);
+    if (t > 0) setForm(p => ({ ...p, total: t }));
+  }, [form.bid_price, form.delivery_charges, form.bank_charges, form.commission]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateJapanPartsPurchase(partId, { ...form, user_id: part.user_id });
+      toast.success('Part updated');
+      onSaved();
+      load();
+    } catch { toast.error('Failed to save'); }
+    finally { setSaving(false); }
+  };
+
+  const L = ({ children }) => (
+    <label className="block mb-1 text-xs font-medium" style={{ color: 'var(--ae-ink-faint)' }}>{children}</label>
+  );
+
+  if (!part) return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="w-full sm:max-w-2xl flex items-center justify-center" style={{ background: 'var(--ae-surface)' }}>
+        <p style={{ color: 'var(--ae-ink-muted)' }}>Loading…</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="w-full sm:max-w-2xl overflow-y-auto flex flex-col" style={{ background: 'var(--ae-surface)', borderLeft: '1px solid var(--ae-glass-border)' }}>
+
+        {/* Header */}
+        <div className="sticky top-0 z-10 px-6 py-4 flex items-start justify-between"
+          style={{ background: 'var(--ae-surface)', borderBottom: '1px solid var(--ae-glass-border)' }}>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest mb-0.5" style={{ color: 'var(--ae-red)' }}>Part Detail</p>
+            <h2 className="font-bold text-lg" style={{ color: 'var(--ae-ink)' }}>{part.item}</h2>
+            {part.auction_id && (
+              <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--ae-ink-faint)' }}>{part.auction_id}</p>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:opacity-70 mt-1" style={{ color: 'var(--ae-ink-faint)' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 flex-1 space-y-6">
+
+          {/* Item info */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--ae-ink-faint)' }}>Item Details</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2"><L>Item</L><input className="input-field text-sm" value={form.item} onChange={e => set('item', e.target.value)} /></div>
+              <div><L>Purchased Date</L><input type="date" className="input-field text-sm" value={form.purchased_date} onChange={e => set('purchased_date', e.target.value)} /></div>
+              <div><L>Particular</L><input className="input-field text-sm" value={form.particular} onChange={e => set('particular', e.target.value)} /></div>
+              <div><L>Auction ID</L><input className="input-field text-sm font-mono" value={form.auction_id} onChange={e => set('auction_id', e.target.value)} /></div>
+              <div>
+                <L>Delivery Status</L>
+                <select className="select-field text-sm" value={form.delivery_status} onChange={e => set('delivery_status', e.target.value)}>
+                  {PART_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1).toLowerCase()}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Delivery */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--ae-ink-faint)' }}>Delivery</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div><L>Delivery Company</L><input className="input-field text-sm" value={form.delivery_company} onChange={e => set('delivery_company', e.target.value)} /></div>
+              <div><L>Tracking Number</L><input className="input-field text-sm font-mono" value={form.tracking_number} onChange={e => set('tracking_number', e.target.value)} /></div>
+              <div><L>Delivered To</L><input className="input-field text-sm" value={form.delivered_to} onChange={e => set('delivered_to', e.target.value)} /></div>
+              <div><L>Put In</L><input className="input-field text-sm" value={form.put_in} onChange={e => set('put_in', e.target.value)} /></div>
+            </div>
+          </div>
+
+          {/* Costs */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--ae-ink-faint)' }}>Cost Breakdown</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div><L>Bid Price (¥)</L><input type="number" className="input-field text-sm" value={form.bid_price} onChange={e => set('bid_price', e.target.value)} /></div>
+              <div><L>Delivery Charges (¥)</L><input type="number" className="input-field text-sm" value={form.delivery_charges} onChange={e => set('delivery_charges', e.target.value)} /></div>
+              <div><L>Bank Charges (¥)</L><input type="number" className="input-field text-sm" value={form.bank_charges} onChange={e => set('bank_charges', e.target.value)} /></div>
+              <div><L>Commission (¥)</L><input type="number" className="input-field text-sm" value={form.commission} onChange={e => set('commission', e.target.value)} /></div>
+              <div className="col-span-2">
+                <L>Total (¥) <span className="ml-1 opacity-50">(auto)</span></L>
+                <input type="number" readOnly className="input-field text-sm font-bold"
+                  style={{ background: 'rgba(52,211,153,0.07)', color: '#34d399', cursor: 'default' }}
+                  value={form.total} />
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0"
+          style={{ background: 'var(--ae-surface)', borderColor: 'var(--ae-glass-border)' }}>
+          <button onClick={onClose} className="btn-ghost">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn-gold gap-2 disabled:opacity-50">
+            <Save size={14} /> {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 export default function AdminJapanPurchases() {
   const [mainTab,     setMainTab]     = useState('purchases'); // 'purchases' | 'parts'
   const [purchases,   setPurchases]   = useState([]);
@@ -841,6 +991,7 @@ export default function AdminJapanPurchases() {
   const [userFilter,  setUserFilter]  = useState('');
   const [allParts,    setAllParts]    = useState([]);
   const [partsLoading,setPartsLoading]= useState(false);
+  const [selectedPart,setSelectedPart]= useState(null);
   const [loading,     setLoading]     = useState(true);
   const [selected,    setSelected]    = useState(null);
   const [creating,    setCreating]    = useState(false);
@@ -1048,7 +1199,8 @@ export default function AdminJapanPurchases() {
                     const userName = users.find(u => u.id === p.user_id)?.name || `User #${p.user_id}`;
                     const statusColor = { DELIVERED:'#059669', delivered:'#059669', pending:'#d97706', shipped:'#2563eb' }[p.delivery_status] || '#64748b';
                     return (
-                      <tr key={p.id} className="border-b hover:bg-black/[0.02]" style={{ borderColor: 'var(--ae-glass-border)' }}>
+                      <tr key={p.id} onClick={() => setSelectedPart(p.id)}
+                        className="border-b hover:bg-black/[0.03] cursor-pointer transition-colors" style={{ borderColor: 'var(--ae-glass-border)' }}>
                         <td className="px-4 py-3 text-xs font-medium" style={{ color: 'var(--ae-ink-muted)' }}>{userName}</td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--ae-ink-muted)' }}>{p.purchased_date ? new Date(p.purchased_date).toLocaleDateString('en-GB') : '—'}</td>
                         <td className="px-4 py-3 text-sm font-medium max-w-[180px] truncate" style={{ color: 'var(--ae-ink)' }}>{p.item}</td>
@@ -1066,7 +1218,7 @@ export default function AdminJapanPurchases() {
                         <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.commission ? `¥${Number(p.commission).toLocaleString()}` : '—'}</td>
                         <td className="px-4 py-3 text-sm font-bold text-right" style={{ color: '#34d399' }}>{p.total ? `¥${Number(p.total).toLocaleString()}` : '—'}</td>
                         <td className="px-4 py-3">
-                          <button onClick={async () => { if (!window.confirm('Delete this part?')) return; await deleteJapanPartsPurchase(p.id); loadParts(); toast.success('Deleted'); }}
+                          <button onClick={async (e) => { e.stopPropagation(); if (!window.confirm('Delete this part?')) return; await deleteJapanPartsPurchase(p.id); loadParts(); toast.success('Deleted'); }}
                             className="p-1.5 rounded-lg opacity-40 hover:opacity-100 transition-opacity" style={{ color: '#ef4444' }}>
                             <Trash2 size={14} />
                           </button>
@@ -1105,6 +1257,14 @@ export default function AdminJapanPurchases() {
           onConfirm={handleDelete}
           onCancel={() => setConfirmDelete(null)}
           deleting={deleting}
+        />
+      )}
+
+      {selectedPart && (
+        <PartDrawer
+          partId={selectedPart}
+          onClose={() => setSelectedPart(null)}
+          onSaved={loadParts}
         />
       )}
     </div>
