@@ -37,7 +37,19 @@ const buildLedger = async (userId) => {
     [userId]
   );
 
-  const entries = [...remRows, ...proRows, ...finRows, ...shinRows].sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date));
+  const [partsRows] = await db.query(
+    `SELECT 'parts' as entry_type,
+            CONCAT('PART-', id) as ref,
+            CONCAT('Parts Purchase - ', item) as description,
+            0 as credit, total as debit,
+            COALESCE(purchased_date, DATE(created_at)) as entry_date, id as source_id
+     FROM japan_parts_purchases
+     WHERE user_id = ? AND total IS NOT NULL AND total > 0`,
+    [userId]
+  );
+
+  const entries = [...remRows, ...proRows, ...finRows, ...shinRows, ...partsRows]
+    .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date));
 
   let balance = 0;
   return entries.map(e => {

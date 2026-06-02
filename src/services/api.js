@@ -178,7 +178,12 @@ export const updateJapanBid       = (id, data)       => api.put(`/japan/bids/${i
 export const createJapanPurchase       = (data) => api.post('/japan/purchases', data);
 export const createManualJapanPurchase = (data) => api.post('/japan/purchases/manual', data);
 export const uploadJapanCarImages = (formData) => api.post('/japan/purchases/upload-images', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-export const getMyJapanPurchases  = ()               => api.get('/japan/purchases/my');
+export const getMyJapanPurchases      = ()               => api.get('/japan/purchases/my');
+export const getJapanPartsPurchases   = (params)         => api.get('/japan/parts-purchases', { params });
+export const createJapanPartsPurchase = (data)           => api.post('/japan/parts-purchases', data);
+export const updateJapanPartsPurchase = (id, data)       => api.put(`/japan/parts-purchases/${id}`, data);
+export const deleteJapanPartsPurchase = (id)             => api.delete(`/japan/parts-purchases/${id}`);
+export const exportJapanPartsExcel    = (params)         => api.get('/japan/parts-purchases/export', { params, responseType: 'blob' });
 export const getAllJapanPurchases  = (params)         => api.get('/japan/purchases', { params });
 export const getJapanPurchase     = (id)             => api.get(`/japan/purchases/${id}`);
 

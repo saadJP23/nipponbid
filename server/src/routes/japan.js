@@ -1350,4 +1350,138 @@ router.delete('/purchases/:id/documents/:docId', adminAuth, async (req, res) => 
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// ── Japan Parts Purchases ─────────────────────────────────────────────────────
+
+router.get('/parts-purchases', auth, async (req, res) => {
+  try {
+    const userId = req.user.role === 'admin' && req.query.user_id ? req.query.user_id : req.user.id;
+    const [rows] = await db.query(
+      'SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC',
+      [userId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.post('/parts-purchases', adminAuth, async (req, res) => {
+  try {
+    const { user_id, purchased_date, particular, item, delivered_to, put_in,
+            auction_id, delivery_company, tracking_number, delivery_status,
+            bid_price, delivery_charges, bank_charges, commission, total } = req.body;
+    if (!user_id || !item) return res.status(400).json({ message: 'user_id and item are required' });
+    const [result] = await db.query(
+      `INSERT INTO japan_parts_purchases
+        (user_id,purchased_date,particular,item,delivered_to,put_in,auction_id,
+         delivery_company,tracking_number,delivery_status,bid_price,delivery_charges,
+         bank_charges,commission,total)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [user_id, purchased_date||null, particular||null, item, delivered_to||null, put_in||null,
+       auction_id||null, delivery_company||null, tracking_number||null, delivery_status||'pending',
+       bid_price||null, delivery_charges||null, bank_charges||null, commission||null, total||null]
+    );
+    const [[row]] = await db.query('SELECT * FROM japan_parts_purchases WHERE id=?', [result.insertId]);
+    res.status(201).json(row);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.put('/parts-purchases/:id', adminAuth, async (req, res) => {
+  try {
+    const { purchased_date, particular, item, delivered_to, put_in, auction_id,
+            delivery_company, tracking_number, delivery_status,
+            bid_price, delivery_charges, bank_charges, commission, total } = req.body;
+    await db.query(
+      `UPDATE japan_parts_purchases SET
+        purchased_date=?,particular=?,item=?,delivered_to=?,put_in=?,auction_id=?,
+        delivery_company=?,tracking_number=?,delivery_status=?,bid_price=?,
+        delivery_charges=?,bank_charges=?,commission=?,total=?
+       WHERE id=?`,
+      [purchased_date||null, particular||null, item, delivered_to||null, put_in||null,
+       auction_id||null, delivery_company||null, tracking_number||null, delivery_status||'pending',
+       bid_price||null, delivery_charges||null, bank_charges||null, commission||null, total||null,
+       req.params.id]
+    );
+    const [[row]] = await db.query('SELECT * FROM japan_parts_purchases WHERE id=?', [req.params.id]);
+    res.json(row);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.delete('/parts-purchases/:id', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM japan_parts_purchases WHERE id=?', [req.params.id]);
+    res.json({ message: 'Deleted' });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+// Excel export for parts purchases
+router.get('/parts-purchases/export', auth, async (req, res) => {
+  try {
+    const userId = req.user.role === 'admin' && req.query.user_id ? req.query.user_id : req.user.id;
+    const [rows] = await db.query(
+      'SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC',
+      [userId]
+    );
+    const [[user]] = await db.query('SELECT name FROM users WHERE id=?', [userId]);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'NipponBid';
+    const ws = wb.addWorksheet('Parts Purchases');
+
+    const COLS = [
+      { header: 'NO.',               key: 'id',               width: 6  },
+      { header: 'PURCHASED DATE',    key: 'purchased_date',   width: 16 },
+      { header: 'PARTICULAR',        key: 'particular',       width: 12 },
+      { header: 'ITEM',              key: 'item',             width: 30 },
+      { header: 'DELIVERED TO',      key: 'delivered_to',     width: 18 },
+      { header: 'PUT IN',            key: 'put_in',           width: 10 },
+      { header: 'AUCTION ID',        key: 'auction_id',       width: 16 },
+      { header: 'DELIVERY COMPANY',  key: 'delivery_company', width: 18 },
+      { header: 'TRACKING NUMBER',   key: 'tracking_number',  width: 22 },
+      { header: 'DELIVERY STATUS',   key: 'delivery_status',  width: 16 },
+      { header: 'BID PRICE',         key: 'bid_price',        width: 12 },
+      { header: 'DELIVERY CHARGES',  key: 'delivery_charges', width: 18 },
+      { header: 'BANK CHARGES',      key: 'bank_charges',     width: 14 },
+      { header: 'COMMISION',         key: 'commission',       width: 12 },
+      { header: 'TOTAL',             key: 'total',            width: 14 },
+    ];
+
+    ws.getRow(1).values = COLS.map(c => c.header);
+    COLS.forEach((c, i) => {
+      ws.getColumn(i + 1).width = c.width;
+      const cell = ws.getRow(1).getCell(i + 1);
+      cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1A2E' } };
+      cell.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
+    });
+    ws.getRow(1).height = 28;
+
+    const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB') : '';
+    const fmtNum  = n => (n != null && n !== '') ? Number(n) : '';
+
+    let seq = 1;
+    rows.forEach(r => {
+      const row = ws.addRow([
+        seq++, fmtDate(r.purchased_date), r.particular||'', r.item,
+        r.delivered_to||'', r.put_in||'', r.auction_id||'',
+        r.delivery_company||'', r.tracking_number||'', r.delivery_status||'',
+        fmtNum(r.bid_price), fmtNum(r.delivery_charges),
+        fmtNum(r.bank_charges), fmtNum(r.commission), fmtNum(r.total),
+      ]);
+      row.eachCell(cell => {
+        cell.font = { size: 9 };
+        cell.alignment = { vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE0E0E0' } }, bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          left: { style: 'thin', color: { argb: 'FFE0E0E0' } }, right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        };
+      });
+      row.height = 16;
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="parts-${user?.name?.replace(/\s+/g,'-') || userId}-${Date.now()}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 module.exports = router;
