@@ -136,7 +136,7 @@ function CreateDrawer({ users, onClose, onCreated }) {
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-2xl overflow-y-auto flex flex-col" style={{ background: 'var(--ae-surface)', borderLeft: '1px solid var(--ae-glass-border)' }}>
+      <div className="w-full sm:max-w-2xl overflow-y-auto flex flex-col" style={{ background: 'var(--ae-surface)', borderLeft: '1px solid var(--ae-glass-border)' }}>
 
         <div className="flex items-start justify-between px-6 py-5 border-b sticky top-0 z-10"
           style={{ background: 'var(--ae-surface)', borderColor: 'var(--ae-glass-border)' }}>
@@ -619,7 +619,7 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
     return (
       <div className="fixed inset-0 z-50 flex">
         <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="w-full max-w-2xl flex items-center justify-center" style={{ background: 'var(--ae-surface)' }}>
+        <div className="w-full sm:max-w-2xl flex items-center justify-center" style={{ background: 'var(--ae-surface)' }}>
           <p style={{ color: 'var(--ae-ink-muted)' }}>Loading…</p>
         </div>
       </div>
@@ -629,7 +629,7 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-2xl overflow-y-auto flex flex-col" style={{ background: 'var(--ae-surface)', borderLeft: '1px solid var(--ae-glass-border)' }}>
+      <div className="w-full sm:max-w-2xl overflow-y-auto flex flex-col" style={{ background: 'var(--ae-surface)', borderLeft: '1px solid var(--ae-glass-border)' }}>
 
         <div className="sticky top-0 z-10" style={{ background: 'var(--ae-surface)', borderBottom: '1px solid var(--ae-glass-border)' }}>
           <div className="flex items-start justify-between px-6 py-4">
@@ -930,20 +930,20 @@ export default function AdminJapanPurchases() {
     <div data-theme="light" style={{ background: 'var(--ae-canvas)', minHeight: '100vh' }} className="px-4 py-10">
       <div className="max-w-7xl mx-auto">
 
-        <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
+        <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
           <div>
-            <h1 className="text-3xl font-bold" style={{ color: 'var(--ae-ink)' }}>Japan Purchases</h1>
+            <h1 className="text-2xl md:text-3xl font-bold" style={{ color: 'var(--ae-ink)' }}>Japan Purchases</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--ae-ink-muted)' }}>
-              {total} purchase{total !== 1 ? 's' : ''} — click any row to view & edit
+              {total} purchase{total !== 1 ? 's' : ''} — tap any row to view &amp; edit
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <select className="input-field w-56 text-sm" value={userFilter} onChange={e => setUserFilter(e.target.value)}>
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            <select className="input-field flex-1 sm:w-48 text-sm" value={userFilter} onChange={e => setUserFilter(e.target.value)}>
               <option value="">All Clients</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
-            <button onClick={() => setCreating(true)} className="btn-gold flex items-center gap-2">
-              <Plus size={15} /> Add Manual Purchase
+            <button onClick={() => setCreating(true)} className="btn-gold flex items-center gap-2 whitespace-nowrap">
+              <Plus size={15} /> Add Purchase
             </button>
           </div>
         </div>
@@ -958,8 +958,8 @@ export default function AdminJapanPurchases() {
             <p style={{ color: 'var(--ae-ink-muted)' }}>No purchases found</p>
           </div>
         ) : (
-          <div className="card overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="card overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="border-b text-xs uppercase" style={{ borderColor: 'var(--ae-glass-border)', color: 'var(--ae-ink-faint)' }}>
                   {cols.map(c => (
