@@ -29,7 +29,10 @@ const buildLedger = async (userId) => {
     `SELECT 'purchase' as entry_type,
             CONCAT('JP-', p.pid) as ref,
             CONCAT('Japan Purchase - ', c.make, ' ', c.model, ' (', c.year, ')') as description,
-            0 as credit, p.total as debit,
+            0 as credit,
+            (COALESCE(p.bid_price,0)+COALESCE(p.auction_fee,0)+COALESCE(p.transportation,0)+
+             COALESCE(p.loading_custom,0)+COALESCE(p.auction_commission,0)+COALESCE(p.commission,0)+
+             COALESCE(p.radiation_photos,0)+COALESCE(p.custom_fee,0)+COALESCE(p.freight,0)) as debit,
             COALESCE(c.auction_date, DATE(p.created_at)) as entry_date, p.id as source_id
      FROM japan_purchases p
      JOIN japan_cars c ON c.pid = p.pid

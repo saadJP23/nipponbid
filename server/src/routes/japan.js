@@ -556,10 +556,12 @@ async function buildAccountExcel(userName, purchases, remittances, parts = []) {
   const thin  = (argb = C.border)    => bdr('thin', argb);
   const med   = (argb = C.navyDark)  => bdr('medium', argb);
 
-  // User total excludes tax and recycle
-  const totalDebit  = purchases.reduce((s, p) =>
+  // User total excludes tax and recycle; includes parts
+  const carDebit    = purchases.reduce((s, p) =>
     s + n(p.bid_price) + n(p.auction_fee) + n(p.transportation) + n(p.loading_custom) +
     n(p.auction_commission) + n(p.commission) + n(p.radiation_photos) + n(p.custom_fee) + n(p.freight), 0);
+  const partsDebit  = (parts || []).reduce((s, p) => s + n(p.total), 0);
+  const totalDebit  = carDebit + partsDebit;
   const totalCredit = (remittances || []).reduce((s, r) => s + (n(r.deposit_amount) || n(r.transfer_amount)), 0);
   const netBalance  = totalCredit - totalDebit;
   const isNeg       = netBalance < 0;
@@ -700,7 +702,7 @@ async function buildAccountExcel(userName, purchases, remittances, parts = []) {
     ['H12:J12', `Purchases: ¥${totalDebit.toLocaleString()}`],
     ['K12:M12', `Received: ¥${totalCredit.toLocaleString()}`],
     ['N12:P12', `${purchases.length} Car${purchases.length !== 1 ? 's' : ''}`],
-    ['O12:S12', `${(remittances || []).length} Payment${(remittances || []).length !== 1 ? 's' : ''}`],
+    ['Q12:S12', `${(remittances || []).length} Payment${(remittances || []).length !== 1 ? 's' : ''}`],
   ].forEach(([range, val]) => {
     ws.mergeCells(range);
     const addr = range.split(':')[0];
@@ -1108,6 +1110,7 @@ async function buildAccountExcel(userName, purchases, remittances, parts = []) {
   bRow(4,  'Customer',            userName || 'Customer');
   bRow(5,  'Statement Date',      new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }));
   bRow(6,  'Total Cars',          purchases.length);
+  if (parts && parts.length > 0) bRow(7, 'Total Parts', parts.length);
   bRow(8,  'Total Purchases',     totalDebit,  NF, C.redText);
   bRow(9,  'Total Payments',      totalCredit, NF, C.greenText);
   ws2.getRow(11).height = 32;

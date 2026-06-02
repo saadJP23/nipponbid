@@ -1251,7 +1251,7 @@ export default function AdminJapanPurchases() {
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="border-b text-xs uppercase" style={{ borderColor: 'var(--ae-glass-border)', color: 'var(--ae-ink-faint)' }}>
-                    {['Client','Date','Item','Auction ID','Delivery Co.','Tracking','Status','Bid Price','Del. Charges','Bank Chg','Commission','Total',''].map(h => (
+                    {['Client','Date','Item','Auction ID','Delivery Co.','Tracking','Status','Total',''].map(h => (
                       <th key={h} className="px-4 py-3 text-left whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -1274,10 +1274,6 @@ export default function AdminJapanPurchases() {
                             <span className="text-xs px-2 py-0.5 rounded-full capitalize" style={{ background: `${statusColor}18`, color: statusColor }}>{p.delivery_status}</span>
                           ) : <span style={{ color: 'var(--ae-ink-faint)' }}>—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.bid_price ? `¥${Number(p.bid_price).toLocaleString()}` : '—'}</td>
-                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.delivery_charges ? `¥${Number(p.delivery_charges).toLocaleString()}` : '—'}</td>
-                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.bank_charges ? `¥${Number(p.bank_charges).toLocaleString()}` : '—'}</td>
-                        <td className="px-4 py-3 text-xs text-right" style={{ color: 'var(--ae-ink-muted)' }}>{p.commission ? `¥${Number(p.commission).toLocaleString()}` : '—'}</td>
                         <td className="px-4 py-3 text-sm font-bold text-right" style={{ color: '#34d399' }}>{p.total ? `¥${Number(p.total).toLocaleString()}` : '—'}</td>
                         <td className="px-4 py-3">
                           <button onClick={async (e) => { e.stopPropagation(); if (!window.confirm('Delete this part?')) return; await deleteJapanPartsPurchase(p.id); loadParts(); toast.success('Deleted'); }}
