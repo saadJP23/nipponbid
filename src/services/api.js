@@ -131,7 +131,8 @@ export const getBLRequests     = (params)    => api.get('/shipments/bl-requests'
 export const createBLRequest   = (data)      => api.post('/shipments/bl-requests', withBLDates(data));
 export const updateBLRequest   = (id, data)  => api.put(`/shipments/bl-requests/${id}`, withBLDates(data));
 export const uploadShipmentDoc = (id, formData) => api.post(`/shipments/${id}/document`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-export const uploadBLDoc = (id, formData) => api.post(`/shipments/bl-requests/${id}/document`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+export const uploadBLDoc  = (id, formData) => api.post(`/shipments/bl-requests/${id}/document`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+export const deleteBLDoc  = (id, data)     => api.delete(`/shipments/bl-requests/${id}/document`, { data });
 export const getAdminOthers = () => api.get('/shipments/others');
 export const createAdminOther = (formData) => api.post('/shipments/others', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const updateAdminOther = (id, formData) => api.put(`/shipments/others/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });

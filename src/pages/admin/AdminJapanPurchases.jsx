@@ -8,8 +8,7 @@ import {
   getAllJapanPurchases, updateJapanPurchase, deleteJapanPurchase,
   uploadJapanDocument, deleteJapanDocument, getJapanPurchase,
   getAdminUsers, createManualJapanPurchase, uploadJapanCarImages,
-  getBLRequests, createBLRequest, updateBLRequest, uploadBLDoc,
-  getShipmentByFileCode, createShipment, updateShipment, uploadShipmentDoc,
+  getBLRequests, createBLRequest, updateBLRequest, uploadBLDoc, deleteBLDoc,
   getAdminOthers, createAdminOther, updateAdminOther, deleteAdminOther,
   resolveImageUrl,
 } from '../../services/api';
@@ -270,85 +269,49 @@ function ShipmentTab({ purchase }) {
     <label className="block mb-1 text-xs font-medium" style={{ color: 'var(--ae-ink-faint)' }}>{children}</label>
   );
 
-  
-  const [bl,        setBl]        = useState(null);
-  const [blForm,    setBlForm]    = useState({});
-  const [blSaving,  setBlSaving]  = useState(false);
+  const [bl,          setBl]          = useState(null);
+  const [blForm,      setBlForm]      = useState({});
+  const [blSaving,    setBlSaving]    = useState(false);
   const [blUploading, setBlUploading] = useState(false);
+  const blFileRef = useRef();
 
-  
-  const [vessel,       setVessel]       = useState(null);
-  const [vesselForm,   setVesselForm]   = useState({});
-  const [vesselSaving, setVesselSaving] = useState(false);
-  const [vesselUploading, setVesselUploading] = useState(false);
-
-  
-  const [others,       setOthers]      = useState([]);
-  const [otherForm,    setOtherForm]   = useState({ title: '', category: 'general', description: '' });
-  const [otherFile,    setOtherFile]   = useState(null);
-  const [otherSaving,  setOtherSaving] = useState(false);
+  const [others,        setOthers]       = useState([]);
+  const [otherForm,     setOtherForm]    = useState({ title: '', category: 'general', description: '' });
+  const [otherFile,     setOtherFile]    = useState(null);
+  const [otherSaving,   setOtherSaving]  = useState(false);
   const [showOtherForm, setShowOtherForm] = useState(false);
 
-  const genFileCode = () => `FC-${purchase.id}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
-  const genBLCode   = () => `BLC-${purchase.id}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+  // Stable auto-generated file code — created once per mount, not on every load
+  const autoFCRef = useRef(purchase.file_code || `FC-${purchase.id}-${Math.random().toString(36).slice(2,7).toUpperCase()}`);
 
   const loadBL = useCallback(async () => {
     try {
       const { data } = await getBLRequests({ purchase_id: purchase.id });
       const rec = Array.isArray(data) ? data[0] : null;
       setBl(rec || null);
-      const autoFC = purchase.file_code || genFileCode();
+      const fc = rec?.file_code || purchase.file_code || autoFCRef.current;
       setBlForm(rec ? {
-        file_code: rec.file_code || autoFC, chassis_number: rec.chassis_number || '',
+        file_code: fc, chassis_number: rec.chassis_number || '',
         shipping_company: rec.shipping_company || '', ship_name: rec.ship_name || '',
-        eto: toDateInputValue(rec.eto),
-        eta: toDateInputValue(rec.eta),
+        eto: toDateInputValue(rec.eto), eta: toDateInputValue(rec.eta),
         port_of_loading: rec.port_of_loading || '', port_of_discharge: rec.port_of_discharge || '',
         status: rec.status || 'pending',
       } : {
-        file_code: autoFC, chassis_number: purchase.chassis || '',
+        file_code: fc, chassis_number: purchase.chassis || '',
         shipping_company: purchase.shipping_company || '', ship_name: purchase.ship_name || '',
         eto: '', eta: toDateInputValue(purchase.eta),
         port_of_loading: '', port_of_discharge: purchase.destination || '',
         status: 'pending',
       });
     } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [purchase]);
-
-  const loadVessel = useCallback(async () => {
-    try {
-      const fc = purchase.file_code || null;
-      const data = fc ? (await getShipmentByFileCode(fc)).data : null;
-      setVessel(data || null);
-      const autoFC = fc || genFileCode();
-      const autoBC = genBLCode();
-      setVesselForm(data ? {
-        file_code: data.file_code || autoFC, bl_code: data.bl_code || autoBC,
-        ship_name: data.ship_name || '', shipping_company: data.shipping_company || '',
-        port_of_loading: data.port_of_loading || '',
-        port_of_discharge: data.port_of_discharge || '',
-        etd: toDateInputValue(data.etd), eta: toDateInputValue(data.eta),
-        status: data.status || 'pending', notes: data.notes || '',
-      } : {
-        file_code: autoFC, bl_code: autoBC, ship_name: purchase.ship_name || '',
-        shipping_company: purchase.shipping_company || '',
-        port_of_loading: '', port_of_discharge: purchase.destination || '',
-        etd: toDateInputValue(purchase.etd),
-        eta: toDateInputValue(purchase.eta),
-        status: 'pending', notes: '',
-      });
-    } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchase]);
 
   const loadOthers = useCallback(async () => {
     try { const { data } = await getAdminOthers(); setOthers(data || []); } catch {}
   }, []);
 
-  useEffect(() => { loadBL(); loadVessel(); loadOthers(); }, [loadBL, loadVessel, loadOthers]);
+  useEffect(() => { loadBL(); loadOthers(); }, [loadBL, loadOthers]);
 
-  
   const handleBLSave = async () => {
     setBlSaving(true);
     try {
@@ -364,8 +327,8 @@ function ShipmentTab({ purchase }) {
     finally { setBlSaving(false); }
   };
 
-  
-  const handleBLUpload = async (file) => {
+  const handleBLUpload = async (files) => {
+    if (!files?.length) return;
     setBlUploading(true);
     try {
       let blId = bl?.id;
@@ -374,49 +337,24 @@ function ShipmentTab({ purchase }) {
         setBl(data);
         blId = data.id;
       }
-      const fd = new FormData(); fd.append('file', file);
+      const fd = new FormData();
+      Array.from(files).forEach(f => fd.append('files', f));
       await uploadBLDoc(blId, fd);
-      toast.success('File attached');
+      toast.success(`${files.length} file(s) attached`);
       loadBL();
     } catch { toast.error('Upload failed'); }
     finally { setBlUploading(false); }
   };
 
-  
-  const handleVesselSave = async () => {
-    setVesselSaving(true);
+  const handleBLDocDelete = async (path) => {
+    if (!bl?.id) return;
     try {
-      if (vessel) {
-        await updateShipment(vessel.id, vesselForm);
-      } else {
-        const { data } = await createShipment(vesselForm);
-        setVessel(data);
-      }
-      toast.success('Vessel saved');
-      loadVessel();
-    } catch { toast.error('Failed to save Vessel'); }
-    finally { setVesselSaving(false); }
+      await deleteBLDoc(bl.id, { path });
+      toast.success('File removed');
+      loadBL();
+    } catch { toast.error('Failed to remove file'); }
   };
 
-  
-  const handleVesselUpload = async (file) => {
-    setVesselUploading(true);
-    try {
-      let vesselId = vessel?.id;
-      if (!vesselId) {
-        const { data } = await createShipment(vesselForm);
-        setVessel(data);
-        vesselId = data.id;
-      }
-      const fd = new FormData(); fd.append('file', file);
-      await uploadShipmentDoc(vesselId, fd);
-      toast.success('File attached');
-      loadVessel();
-    } catch { toast.error('Upload failed'); }
-    finally { setVesselUploading(false); }
-  };
-
-  
   const handleOtherSave = async () => {
     if (!otherForm.title) { toast.error('Title is required'); return; }
     setOtherSaving(true);
@@ -443,7 +381,6 @@ function ShipmentTab({ purchase }) {
   };
 
   const bf = (k) => ({ value: blForm[k] || '', onChange: e => setBlForm(p => ({ ...p, [k]: e.target.value })) });
-  const vf = (k) => ({ value: vesselForm[k] || '', onChange: e => setVesselForm(p => ({ ...p, [k]: e.target.value })) });
 
   return (
     <div className="space-y-8">
@@ -470,46 +407,42 @@ function ShipmentTab({ purchase }) {
           <div><L>ETO</L><input type="date" className="input-field text-sm" {...bf('eto')} /></div>
           <div><L>ETA</L><input type="date" className="input-field text-sm" {...bf('eta')} /></div>
         </div>
-        <div className="mt-3">
-          <L>Attach BL Document</L>
-          <FileUploadBtn
-            currentPath={bl?.document_path} currentName={bl?.document_name}
-            onUpload={handleBLUpload} uploading={blUploading} />
+
+        {/* Multi-file BL document upload */}
+        <div className="mt-4">
+          <L>BL Documents</L>
+          {bl?.document_path && (
+            <div className="space-y-1 mb-2">
+              {bl.document_path.split(',').filter(Boolean).map((p, i) => {
+                const name = (bl.document_name || '').split(',').filter(Boolean)[i] || p.split('/').pop();
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <a href={p} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg hover:opacity-80 flex-1 min-w-0 truncate"
+                      style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>
+                      <FileText size={11} className="shrink-0" /> {name}
+                    </a>
+                    <button onClick={() => handleBLDocDelete(p)}
+                      className="p-1 rounded hover:opacity-70" style={{ color: '#ef4444' }}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <input ref={blFileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden"
+            onChange={e => handleBLUpload(e.target.files)} />
+          <button type="button" disabled={blUploading} onClick={() => blFileRef.current?.click()}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border border-dashed hover:opacity-80 disabled:opacity-50"
+            style={{ borderColor: 'var(--ae-glass-border)', color: 'var(--ae-ink-faint)' }}>
+            <Upload size={13} /> {blUploading ? 'Uploading…' : 'Attach Files'}
+          </button>
         </div>
+
         <div className="flex justify-end mt-3">
           <button onClick={handleBLSave} disabled={blSaving} className="btn-gold gap-1.5 text-sm disabled:opacity-50">
             <Save size={13} /> {blSaving ? 'Saving…' : bl ? 'Update BL' : 'Create BL Request'}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ borderTop: '1px solid var(--ae-glass-border)', paddingTop: '2rem' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Ship size={14} style={{ color: 'var(--ae-ink-faint)' }} />
-          <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--ae-ink-faint)' }}>Vessel</h3>
-          {vessel && <span className="badge-gray text-xs ml-auto">{vessel.status}</span>}
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><L>File Code</L><input className="input-field text-sm" {...vf('file_code')} /></div>
-          <div><L>BL Code</L><input className="input-field text-sm" {...vf('bl_code')} /></div>
-          <div>
-            <L>Status</L>
-            <select className="select-field text-sm" {...vf('status')}>
-              {SHIP_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
-            </select>
-          </div>
-          <div><L>ETD</L><input type="date" className="input-field text-sm" {...vf('etd')} /></div>
-          <div className="col-span-2"><L>Notes</L><textarea rows={2} className="input-field text-sm resize-none" {...vf('notes')} /></div>
-        </div>
-        <div className="mt-3">
-          <L>Attach Vessel Document</L>
-          <FileUploadBtn
-            currentPath={vessel?.document_path} currentName={vessel?.document_name}
-            onUpload={handleVesselUpload} uploading={vesselUploading} />
-        </div>
-        <div className="flex justify-end mt-3">
-          <button onClick={handleVesselSave} disabled={vesselSaving} className="btn-gold gap-1.5 text-sm disabled:opacity-50">
-            <Save size={13} /> {vesselSaving ? 'Saving…' : vessel ? 'Update Vessel' : 'Create Vessel'}
           </button>
         </div>
       </div>

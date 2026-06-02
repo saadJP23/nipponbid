@@ -180,13 +180,34 @@ router.post('/:id/document', adminAuth, uploadDocument.single('file'), async (re
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-router.post('/bl-requests/:id/document', adminAuth, uploadDocument.single('file'), async (req, res) => {
+router.post('/bl-requests/:id/document', adminAuth, uploadDocument.array('files', 10), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ message: 'No file provided' });
-    const filePath = `/uploads/documents/${req.file.filename}`;
+    if (!req.files?.length) return res.status(400).json({ message: 'No files provided' });
+    const [[existing]] = await db.query('SELECT document_path, document_name FROM bl_requests WHERE id=?', [req.params.id]);
+    const existingPaths = existing?.document_path ? existing.document_path.split(',').filter(Boolean) : [];
+    const existingNames = existing?.document_name ? existing.document_name.split(',').filter(Boolean) : [];
+    const newPaths = req.files.map(f => `/uploads/documents/${f.filename}`);
+    const newNames = req.files.map(f => f.originalname);
+    const combinedPaths = [...existingPaths, ...newPaths].join(',');
+    const combinedNames = [...existingNames, ...newNames].join(',');
     await db.query('UPDATE bl_requests SET document_path=?, document_name=? WHERE id=?',
-      [filePath, req.file.originalname, req.params.id]);
-    res.json({ document_path: filePath, document_name: req.file.originalname });
+      [combinedPaths, combinedNames, req.params.id]);
+    res.json({ document_path: combinedPaths, document_name: combinedNames });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.delete('/bl-requests/:id/document', adminAuth, async (req, res) => {
+  try {
+    const { path: targetPath } = req.body;
+    if (!targetPath) return res.status(400).json({ message: 'path required' });
+    const [[existing]] = await db.query('SELECT document_path, document_name FROM bl_requests WHERE id=?', [req.params.id]);
+    const paths = existing?.document_path ? existing.document_path.split(',').filter(Boolean) : [];
+    const names = existing?.document_name ? existing.document_name.split(',').filter(Boolean) : [];
+    const idx = paths.indexOf(targetPath);
+    if (idx !== -1) { paths.splice(idx, 1); names.splice(idx, 1); }
+    await db.query('UPDATE bl_requests SET document_path=?, document_name=? WHERE id=?',
+      [paths.join(',') || null, names.join(',') || null, req.params.id]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
