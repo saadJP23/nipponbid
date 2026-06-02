@@ -556,7 +556,10 @@ async function buildAccountExcel(userName, purchases, remittances) {
   const thin  = (argb = C.border)    => bdr('thin', argb);
   const med   = (argb = C.navyDark)  => bdr('medium', argb);
 
-  const totalDebit  = purchases.reduce((s, p) => s + n(p.total), 0);
+  // User total excludes tax and recycle
+  const totalDebit  = purchases.reduce((s, p) =>
+    s + n(p.bid_price) + n(p.auction_fee) + n(p.transportation) + n(p.loading_custom) +
+    n(p.auction_commission) + n(p.commission) + n(p.radiation_photos) + n(p.custom_fee) + n(p.freight), 0);
   const totalCredit = (remittances || []).reduce((s, r) => s + (n(r.deposit_amount) || n(r.transfer_amount)), 0);
   const netBalance  = totalCredit - totalDebit;
   const isNeg       = netBalance < 0;
@@ -586,12 +589,13 @@ async function buildAccountExcel(userName, purchases, remittances) {
   }
 
   const ws = wb.addWorksheet('Data');
-  const COL_W = [6, 13, 18, 10, 18, 12, 16, 7, 13, 12, 16, 16, 15, 10, 15, 10, 11, 10, 14, 14, 15];
+  // 19 columns: removed TAX 10% and RECYCLE (admin-only fields)
+  const COL_W = [6, 13, 18, 10, 18, 12, 16, 7, 13, 12, 16, 16, 15, 15, 10, 11, 14, 14, 15];
   COL_W.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.views = [{ state: 'frozen', ySplit: 15 }];
 
   ws.getRow(1).height = 38;
-  ws.mergeCells('A1:U1');
+  ws.mergeCells('A1:S1');
   Object.assign(ws.getCell('A1'), {
     value:     'AUTO BID 株式会社  ·  ACCOUNT STATEMENT',
     font:      { name: 'Arial', size: 16, bold: true, color: { argb: C.white } },
@@ -607,7 +611,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
     fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: C.navyMid } },
     alignment: { horizontal: 'left', vertical: 'middle' },
   });
-  ws.mergeCells('K2:U2');
+  ws.mergeCells('K2:S2');
   Object.assign(ws.getCell('K2'), {
     value:     `Statement Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}  `,
     font:      { name: 'Arial', size: 10, color: { argb: C.white } },
@@ -616,10 +620,10 @@ async function buildAccountExcel(userName, purchases, remittances) {
   });
 
   ws.getRow(3).height = 5;
-  ws.mergeCells('A3:U3');
+  ws.mergeCells('A3:S3');
   ws.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBBF24' } };
 
-  ws.mergeCells('K4:U10');
+  ws.mergeCells('K4:S10');
   if (stampImageId !== null) {
     Object.assign(ws.getCell('K4'), {
       fill:   { type: 'pattern', pattern: 'solid', fgColor: { argb: C.white } },
@@ -671,7 +675,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
   });
 
   ws.getRow(11).height = 6;
-  ws.mergeCells('A11:U11');
+  ws.mergeCells('A11:S11');
   ws.getCell('A11').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
 
   ws.getRow(12).height = 34;
@@ -696,7 +700,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
     ['H12:J12', `Purchases: ¥${totalDebit.toLocaleString()}`],
     ['K12:M12', `Received: ¥${totalCredit.toLocaleString()}`],
     ['N12:P12', `${purchases.length} Car${purchases.length !== 1 ? 's' : ''}`],
-    ['Q12:U12', `${(remittances || []).length} Payment${(remittances || []).length !== 1 ? 's' : ''}`],
+    ['O12:S12', `${(remittances || []).length} Payment${(remittances || []).length !== 1 ? 's' : ''}`],
   ].forEach(([range, val]) => {
     ws.mergeCells(range);
     const addr = range.split(':')[0];
@@ -710,7 +714,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
   });
 
   ws.getRow(13).height = 4;
-  ws.mergeCells('A13:U13');
+  ws.mergeCells('A13:S13');
   ws.getCell('A13').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.navyDark } };
 
   ws.getRow(14).height = 16;
@@ -721,7 +725,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
     fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } },
     alignment: { horizontal: 'left', vertical: 'middle' },
   });
-  ws.mergeCells('I14:U14');
+  ws.mergeCells('I14:S14');
   Object.assign(ws.getCell('I14'), {
     value:     'See "Details" sheet for shipping, invoice & inspection data  →',
     font:      { name: 'Arial', size: 8, italic: true, color: { argb: C.navyMid } },
@@ -731,6 +735,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
 
   const HEADER_ROW = 15;
   ws.getRow(HEADER_ROW).height = 34;
+  // TAX 10% and RECYCLE removed — admin-only fields kept in admin Excel only
   const HEADERS = [
     { t: 'NO.',                bg: C.navyDark  },
     { t: 'AUC DATE',           bg: C.navyDark  },
@@ -745,11 +750,9 @@ async function buildAccountExcel(userName, purchases, remittances) {
     { t: 'TRANSPORTATION',     bg: C.navyMid   },
     { t: 'LOADING\n/CUSTOM',   bg: C.navyMid   },
     { t: 'COMMISSION',         bg: C.navyMid   },
-    { t: 'TAX\n10%',           bg: C.navyMid   },
     { t: 'RADIATION\n& PHOTOS',bg: C.navyMid   },
     { t: 'CUSTOM',             bg: C.navyMid   },
     { t: 'FREIGHT',            bg: C.navyMid   },
-    { t: 'RECYCLE',            bg: C.navyMid   },
     { t: 'TOTAL',              bg: C.navyLight },
     { t: 'DEBIT',              bg: 'FF166534'  },
     { t: 'BALANCE',            bg: C.navyDark  },
@@ -757,7 +760,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
   HEADERS.forEach(({ t, bg }, i) => {
     const cell = ws.getRow(HEADER_ROW).getCell(i + 1);
     cell.value     = t;
-    cell.font      = { name: 'Arial', size: 9, bold: true, color: { argb: i === 19 ? 'FF6EE7B7' : C.white } };
+    cell.font      = { name: 'Arial', size: 9, bold: true, color: { argb: i === 17 ? 'FF6EE7B7' : C.white } };
     cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     cell.border    = { top: thin(C.navyMid), bottom: med('FFFBBF24'), left: thin(C.navyMid), right: thin(C.navyMid) };
@@ -786,8 +789,11 @@ async function buildAccountExcel(userName, purchases, remittances) {
     if (entry.type === 'purchase') {
       purchaseIdx++;
       const p          = entry.data;
-      const total      = n(p.total);
-      runBalance      -= total;
+      // Total shown to user = all cost fields except tax and recycle
+      const userTotal  = n(p.bid_price) + n(p.auction_fee) + n(p.transportation) +
+                         n(p.loading_custom) + n(p.auction_commission) + n(p.commission) +
+                         n(p.radiation_photos) + n(p.custom_fee) + n(p.freight);
+      runBalance      -= userTotal;
       const commission = n(p.auction_commission) + n(p.commission);
       const rowFill    = altRow ? C.rowAlt : C.white;
       altRow = !altRow;
@@ -798,16 +804,14 @@ async function buildAccountExcel(userName, purchases, remittances) {
         p.make || '', p.model || '', p.year || '',
         n(p.bid_price), n(p.auction_fee), n(p.transportation),
         n(p.loading_custom), commission,
-        n(p.tax_10pct),
         n(p.radiation_photos),
         n(p.custom_fee), n(p.freight),
-        n(p.recycle),
-        total,
+        userTotal,
         null,
         runBalance,
       ];
 
-      for (let c = 1; c <= 21; c++) {
+      for (let c = 1; c <= 19; c++) {
         const cell = row.getCell(c);
         cell.font   = { name: 'Arial', size: 9, color: { argb: C.textDark } };
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowFill } };
@@ -821,24 +825,24 @@ async function buildAccountExcel(userName, purchases, remittances) {
         }
         if (c === 2) cell.alignment = { horizontal: 'center', vertical: 'middle' };
         if (c === 8) cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        if (c >= 9 && c <= 18) {
+        if (c >= 9 && c <= 16) {
           cell.numFmt    = NF;
           cell.alignment = { horizontal: 'right', vertical: 'middle' };
         }
-        if (c === 19) {
+        if (c === 17) { // TOTAL
           cell.numFmt    = NF;
           cell.font      = { name: 'Arial', size: 9, bold: true, color: { argb: C.navyDark } };
           cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
           cell.alignment = { horizontal: 'right', vertical: 'middle' };
           cell.border    = { top: hair(), bottom: hair(), left: med(), right: thin(C.border) };
         }
-        if (c === 20) {
+        if (c === 18) { // DEBIT (payment col, blank for purchases)
           cell.numFmt    = '#,##0;(#,##0);"-"';
           cell.font      = { name: 'Arial', size: 9, color: { argb: 'FFCCCCCC' } };
           cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         }
-        if (c === 21) {
+        if (c === 19) { // BALANCE
           const neg = runBalance < 0;
           cell.numFmt    = '#,##0;(#,##0)';
           cell.font      = { name: 'Arial', size: 9, bold: true, color: { argb: neg ? C.redText : C.greenText } };
@@ -854,7 +858,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
       runBalance += amt;
       altRow = !altRow;
 
-      for (let c = 1; c <= 21; c++) {
+      for (let c = 1; c <= 19; c++) {
         const cell = row.getCell(c);
         cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.greenBg } };
         cell.border = { top: thin(C.greenBdr), bottom: thin(C.greenBdr), left: thin(C.greenBdr), right: thin(C.greenBdr) };
@@ -872,19 +876,19 @@ async function buildAccountExcel(userName, purchases, remittances) {
       row.getCell(3).value = `PAYMENT RECEIVED  —  ${r.name || r.ref_no || ''}`;
       row.getCell(3).font  = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF14532D' } };
 
-      row.getCell(20).value     = amt;
-      row.getCell(20).numFmt    = NF;
-      row.getCell(20).font      = { name: 'Arial', size: 9, bold: true, color: { argb: C.greenText } };
-      row.getCell(20).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.greenDark } };
-      row.getCell(20).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(18).value     = amt;   // DEBIT col
+      row.getCell(18).numFmt    = NF;
+      row.getCell(18).font      = { name: 'Arial', size: 9, bold: true, color: { argb: C.greenText } };
+      row.getCell(18).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.greenDark } };
+      row.getCell(18).alignment = { horizontal: 'right', vertical: 'middle' };
 
       const neg = runBalance < 0;
-      row.getCell(21).value     = runBalance;
-      row.getCell(21).numFmt    = '#,##0;(#,##0)';
-      row.getCell(21).font      = { name: 'Arial', size: 9, bold: true, color: { argb: neg ? C.redText : C.greenText } };
-      row.getCell(21).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: neg ? C.redBg : C.greenDark } };
-      row.getCell(21).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(21).border    = { top: thin(C.greenBdr), bottom: thin(C.greenBdr), left: med(), right: thin(C.greenBdr) };
+      row.getCell(19).value     = runBalance;   // BALANCE col
+      row.getCell(19).numFmt    = '#,##0;(#,##0)';
+      row.getCell(19).font      = { name: 'Arial', size: 9, bold: true, color: { argb: neg ? C.redText : C.greenText } };
+      row.getCell(19).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: neg ? C.redBg : C.greenDark } };
+      row.getCell(19).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(19).border    = { top: thin(C.greenBdr), bottom: thin(C.greenBdr), left: med(), right: thin(C.greenBdr) };
     }
 
     rowNum++;
@@ -894,7 +898,7 @@ async function buildAccountExcel(userName, purchases, remittances) {
   const totRow    = ws.getRow(totRowNum);
   totRow.height   = 28;
 
-  for (let c = 1; c <= 21; c++) {
+  for (let c = 1; c <= 19; c++) {
     const cell = totRow.getCell(c);
     cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.navyDark } };
     cell.border    = { top: med('FFFBBF24'), bottom: med('FFFBBF24'), left: thin(C.navyMid), right: thin(C.navyMid) };
@@ -906,28 +910,36 @@ async function buildAccountExcel(userName, purchases, remittances) {
   totRow.getCell(1).font      = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFBBF24' } };
   totRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle', indent: 2 };
 
-  const sumKeys    = ['bid_price','auction_fee','transportation','loading_custom',null,'tax_10pct','radiation_photos','custom_fee','freight','recycle','total'];
-  const sumLetters = ['I','J','K','L','M','N','O','P','Q','R','S'];
+  // Columns 9–17: bid, auction, transport, load/custom, commission, rad&photos, custom, freight, total
+  const sumKeys    = ['bid_price','auction_fee','transportation','loading_custom',null,'radiation_photos','custom_fee','freight',null];
+  const sumLetters = ['I','J','K','L','M','N','O','P','Q'];
   sumKeys.forEach((key, i) => {
-    const result = key === null
-      ? purchases.reduce((s, p) => s + n(p.auction_commission) + n(p.commission), 0)
-      : purchases.reduce((s, p) => s + n(p[key]), 0);
+    let result;
+    if (key === null && i === 4) { // commission col
+      result = purchases.reduce((s, p) => s + n(p.auction_commission) + n(p.commission), 0);
+    } else if (key === null && i === 8) { // total col — sum without tax/recycle
+      result = purchases.reduce((s, p) =>
+        s + n(p.bid_price) + n(p.auction_fee) + n(p.transportation) + n(p.loading_custom) +
+        n(p.auction_commission) + n(p.commission) + n(p.radiation_photos) + n(p.custom_fee) + n(p.freight), 0);
+    } else {
+      result = purchases.reduce((s, p) => s + n(p[key]), 0);
+    }
     const cell = totRow.getCell(9 + i);
     cell.value  = { formula: `SUM(${sumLetters[i]}${DATA_START}:${sumLetters[i]}${totRowNum - 1})`, result };
     cell.numFmt = NF;
   });
-  totRow.getCell(19).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF14532D' } };
+  totRow.getCell(17).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF14532D' } };
 
-  totRow.getCell(20).value  = { formula: `SUM(T${DATA_START}:T${totRowNum - 1})`, result: totalCredit };
-  totRow.getCell(20).numFmt = NF;
-  totRow.getCell(20).font   = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF6EE7B7' } };
-  totRow.getCell(20).fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } };
+  totRow.getCell(18).value  = { formula: `SUM(R${DATA_START}:R${totRowNum - 1})`, result: totalCredit };
+  totRow.getCell(18).numFmt = NF;
+  totRow.getCell(18).font   = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF6EE7B7' } };
+  totRow.getCell(18).fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } };
 
-  totRow.getCell(21).value  = runBalance;
-  totRow.getCell(21).numFmt = '#,##0;(#,##0)';
-  totRow.getCell(21).font   = { name: 'Arial', size: 11, bold: true, color: { argb: isNeg ? 'FFFCA5A5' : 'FF6EE7B7' } };
-  totRow.getCell(21).fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: isNeg ? 'FF7F1D1D' : 'FF14532D' } };
-  totRow.getCell(21).border = { top: med('FFFBBF24'), bottom: med('FFFBBF24'), left: med('FFFBBF24'), right: thin(C.navyMid) };
+  totRow.getCell(19).value  = runBalance;
+  totRow.getCell(19).numFmt = '#,##0;(#,##0)';
+  totRow.getCell(19).font   = { name: 'Arial', size: 11, bold: true, color: { argb: isNeg ? 'FFFCA5A5' : 'FF6EE7B7' } };
+  totRow.getCell(19).fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: isNeg ? 'FF7F1D1D' : 'FF14532D' } };
+  totRow.getCell(19).border = { top: med('FFFBBF24'), bottom: med('FFFBBF24'), left: med('FFFBBF24'), right: thin(C.navyMid) };
 
   const ws3 = wb.addWorksheet('Details');
   const D_W = [6, 12, 18, 10, 18, 14, 16, 13, 15, 12, 24, 12, 28, 22, 22, 14];

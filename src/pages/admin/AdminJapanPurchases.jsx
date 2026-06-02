@@ -46,7 +46,10 @@ function computeTaxAndTotal(f) {
   const taxBase = n('bid_price') + n('auction_fee') + n('transportation') +
                   n('loading_custom') + n('auction_commission') + n('commission');
   const tax   = Math.round(taxBase * 0.10);
-  const total = taxBase + tax + n('recycle');
+  // Total = all cost fields excluding tax and recycle
+  const total = n('bid_price') + n('auction_fee') + n('transportation') +
+                n('loading_custom') + n('auction_commission') + n('commission') +
+                n('freight') + n('radiation_photos') + n('custom_fee');
   return { tax_10pct: tax, total };
 }
 
@@ -58,7 +61,8 @@ function useAutoCalc(form, setForm) {
       return { ...p, tax_10pct, total };
     });
   }, [form.bid_price, form.auction_fee, form.transportation,
-      form.loading_custom, form.auction_commission, form.commission, form.recycle]);
+      form.loading_custom, form.auction_commission, form.commission,
+      form.freight, form.radiation_photos, form.custom_fee]);
 }
 
 const fmt  = (n) => (n != null && n !== 0) ? `¥${Number(n).toLocaleString()}` : '—';
