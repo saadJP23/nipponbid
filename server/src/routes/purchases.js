@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const db = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
-const { uploadDocument } = require('../middleware/upload');
+const { uploadDocument, resolveUploadedFile } = require('../middleware/upload');
 
 const notify = async (userId, title, message, type, relatedId = null) => {
   await db.query('INSERT INTO notifications (user_id, title, message, type, related_id) VALUES (?, ?, ?, ?, ?)', [userId, title, message, type, relatedId]);
@@ -136,7 +136,7 @@ router.post('/:id/documents', adminAuth, uploadDocument.single('document'), asyn
 
     const [result] = await db.query(
       'INSERT INTO documents (purchase_id, type, name, file_path, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.params.id, type, name || req.file.originalname, `/uploads/documents/${req.file.filename}`, req.file.size, req.user.id]
+      [req.params.id, type, name || req.file.originalname, await resolveUploadedFile(req.file, 'nipponbid/documents'), req.file.size, req.user.id]
     );
 
     const typeLabels = { auction_sheet: 'Auction Sheet', export_certificate: 'Export Certificate', bill_of_lading: 'Bill of Lading', inspection_report: 'Inspection Report', deregistration: 'Deregistration', customs_clearance: 'Customs Clearance', other: 'Document' };

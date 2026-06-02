@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const db = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
-const { uploadDocument } = require('../middleware/upload');
+const { uploadDocument, resolveUploadedFile, resolveUploadedFiles } = require('../middleware/upload');
 const { normalizeDate } = require('../utils/dates');
 
 router.get('/my', auth, async (req, res) => {
@@ -173,7 +173,7 @@ router.put('/bl-requests/:id', adminAuth, async (req, res) => {
 router.post('/:id/document', adminAuth, uploadDocument.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file provided' });
-    const filePath = `/uploads/documents/${req.file.filename}`;
+    const filePath = await resolveUploadedFile(req.file, 'nipponbid/documents');
     await db.query('UPDATE shipments SET document_path=?, document_name=? WHERE id=?',
       [filePath, req.file.originalname, req.params.id]);
     res.json({ document_path: filePath, document_name: req.file.originalname });
@@ -186,7 +186,7 @@ router.post('/bl-requests/:id/document', adminAuth, uploadDocument.array('files'
     const [[existing]] = await db.query('SELECT document_path, document_name FROM bl_requests WHERE id=?', [req.params.id]);
     const existingPaths = existing?.document_path ? existing.document_path.split(',').filter(Boolean) : [];
     const existingNames = existing?.document_name ? existing.document_name.split(',').filter(Boolean) : [];
-    const newPaths = req.files.map(f => `/uploads/documents/${f.filename}`);
+    const newPaths = await resolveUploadedFiles(req.files, 'nipponbid/documents');
     const newNames = req.files.map(f => f.originalname);
     const combinedPaths = [...existingPaths, ...newPaths].join(',');
     const combinedNames = [...existingNames, ...newNames].join(',');
@@ -222,7 +222,7 @@ router.post('/others', adminAuth, uploadDocument.single('file'), async (req, res
   try {
     const { title, category, description } = req.body;
     if (!title) return res.status(400).json({ message: 'Title is required' });
-    const filePath = req.file ? `/uploads/documents/${req.file.filename}` : null;
+    const filePath = req.file ? await resolveUploadedFile(req.file, 'nipponbid/documents') : null;
     const fileName = req.file ? req.file.originalname : null;
     const [result] = await db.query(
       'INSERT INTO admin_others (title, category, description, file_path, file_name) VALUES (?, ?, ?, ?, ?)',
@@ -238,7 +238,7 @@ router.put('/others/:id', adminAuth, uploadDocument.single('file'), async (req, 
     const { title, category, description } = req.body;
     const [[existing]] = await db.query('SELECT * FROM admin_others WHERE id=?', [req.params.id]);
     if (!existing) return res.status(404).json({ message: 'Not found' });
-    const filePath = req.file ? `/uploads/documents/${req.file.filename}` : existing.file_path;
+    const filePath = req.file ? await resolveUploadedFile(req.file, 'nipponbid/documents') : existing.file_path;
     const fileName = req.file ? req.file.originalname : existing.file_name;
     await db.query(
       'UPDATE admin_others SET title=?, category=?, description=?, file_path=?, file_name=? WHERE id=?',

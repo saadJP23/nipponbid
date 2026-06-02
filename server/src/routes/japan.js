@@ -1,7 +1,7 @@
 const router   = require('express').Router();
 const db       = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
-const { uploadDocument, uploadJapanCarImages }  = require('../middleware/upload');
+const { uploadDocument, uploadJapanCarImages, resolveUploadedFiles, resolveUploadedFile } = require('../middleware/upload');
 const ExcelJS  = require('exceljs');
 const email    = require('../utils/email');
 const { normalizeDate } = require('../utils/dates');
@@ -403,7 +403,7 @@ router.put('/bids/:id', adminAuth, async (req, res) => {
 router.post('/purchases/upload-images', adminAuth, uploadJapanCarImages.array('images', 20), async (req, res) => {
   try {
     if (!req.files?.length) return res.status(400).json({ message: 'No images uploaded' });
-    const urls = req.files.map(f => `/uploads/japan-car-images/${f.filename}`);
+    const urls = await resolveUploadedFiles(req.files, 'nipponbid/japan-car-images');
     res.json({ urls });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
@@ -1328,9 +1328,10 @@ router.post('/purchases/:id/documents', adminAuth, uploadDocument.single('docume
     if (!p.length) return res.status(404).json({ message: 'Purchase not found' });
     const pur = p[0];
 
+    const filePath = await resolveUploadedFile(req.file, 'nipponbid/documents');
     const [result] = await db.query(
       'INSERT INTO japan_documents (purchase_id, type, name, file_path, file_size, uploaded_by) VALUES (?,?,?,?,?,?)',
-      [req.params.id, type||'other', name||req.file.originalname, `/uploads/documents/${req.file.filename}`, req.file.size, req.user.id],
+      [req.params.id, type||'other', name||req.file.originalname, filePath, req.file.size, req.user.id],
     );
 
     const docName = name || req.file.originalname;

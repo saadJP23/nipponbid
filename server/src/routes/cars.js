@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const db = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
-const { uploadCarImages } = require('../middleware/upload');
+const { uploadCarImages, resolveUploadedFiles } = require('../middleware/upload');
 const path = require('path');
 
 router.get('/auctions', async (req, res) => {
@@ -157,7 +157,8 @@ router.post('/:id/images', adminAuth, uploadCarImages.array('images', 20), async
     const [existing] = await db.query('SELECT COUNT(*) as count FROM car_images WHERE car_id = ?', [id]);
     const hasPrimary = existing[0].count === 0 || setPrimary === '0';
 
-    const values = files.map((f, i) => [id, `/uploads/car-images/${f.filename}`, i === 0 && hasPrimary, i]);
+    const paths = await resolveUploadedFiles(files, 'nipponbid/car-images');
+    const values = paths.map((p, i) => [id, p, i === 0 && hasPrimary, i]);
     await db.query('INSERT INTO car_images (car_id, image_path, is_primary, sort_order) VALUES ?', [values]);
     if (setPrimary && setPrimary !== '0') {
       await db.query('UPDATE car_images SET is_primary = 0 WHERE car_id = ?', [id]);
