@@ -27,6 +27,7 @@ const docFilter = (req, file, cb) => {
 };
 
 const uploadCarImages = multer({ storage: makeStorage('car-images'), fileFilter: imageFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+const uploadJapanCarImages = multer({ storage: makeStorage('japan-car-images'), fileFilter: imageFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 const uploadDocument = multer({ storage: makeStorage('documents'), fileFilter: docFilter, limits: { fileSize: 20 * 1024 * 1024 } });
 
-module.exports = { uploadCarImages, uploadDocument };
+module.exports = { uploadCarImages, uploadJapanCarImages, uploadDocument };

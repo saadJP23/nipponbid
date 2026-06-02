@@ -471,7 +471,7 @@ export default function AdminDashboard() {
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         {p.image_url && (
-                          <img src={resolveImageUrl(p.image_url)} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
+                          <img src={resolveImageUrl(p.image_url.split(',')[0].trim())} alt="" className="w-10 h-8 rounded object-cover shrink-0" />
                         )}
                         <span className="text-white font-medium">{p.make} {p.model} {p.year}</span>
                       </div>

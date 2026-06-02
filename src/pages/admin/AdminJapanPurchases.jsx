@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Car, Search, X, Save, ChevronLeft, ChevronRight,
-  FileText, Upload, Trash2, ExternalLink, Download, Plus, Ship, Paperclip,
+  FileText, Upload, Trash2, ExternalLink, Download, Plus, Ship, Paperclip, ImagePlus,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getAllJapanPurchases, updateJapanPurchase, deleteJapanPurchase,
   uploadJapanDocument, deleteJapanDocument, getJapanPurchase,
-  getAdminUsers, createManualJapanPurchase,
+  getAdminUsers, createManualJapanPurchase, uploadJapanCarImages,
   getBLRequests, createBLRequest, updateBLRequest, uploadBLDoc,
   getShipmentByFileCode, createShipment, updateShipment, uploadShipmentDoc,
   getAdminOthers, createAdminOther, updateAdminOther, deleteAdminOther,
@@ -73,7 +73,6 @@ const CAR_FIELDS = [
   { key: 'lot_number',    label: 'Lot Number',     type: 'text' },
   { key: 'auction_house', label: 'Auction Name',   type: 'text' },
   { key: 'auction_date',  label: 'Auction Date',   type: 'date' },
-  { key: 'image_url',     label: 'Image URL',      type: 'text' },
 ];
 
 const BLANK_CREATE = {
@@ -86,10 +85,37 @@ const BLANK_CREATE = {
 };
 
 function CreateDrawer({ users, onClose, onCreated }) {
-  const [form,    setForm]    = useState(BLANK_CREATE);
-  const [saving,  setSaving]  = useState(false);
+  const [form,       setForm]       = useState(BLANK_CREATE);
+  const [saving,     setSaving]     = useState(false);
+  const [imgPreviews, setImgPreviews] = useState([]);
+  const [imgUploading, setImgUploading] = useState(false);
+  const imgInputRef = useRef();
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
   useAutoCalc(form, setForm);
+
+  const handleImageFiles = async (files) => {
+    if (!files?.length) return;
+    setImgUploading(true);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach(f => fd.append('images', f));
+      const { data } = await uploadJapanCarImages(fd);
+      const newUrls = data.urls;
+      const existingUrls = form.image_url ? form.image_url.split(',').filter(Boolean) : [];
+      const combined = [...existingUrls, ...newUrls].join(',');
+      set('image_url', combined);
+      const previews = newUrls.map(url => ({ url, local: false }));
+      setImgPreviews(prev => [...prev, ...previews]);
+    } catch (err) { toast.error('Image upload failed'); }
+    finally { setImgUploading(false); }
+  };
+
+  const removeImage = (index) => {
+    const urls = form.image_url ? form.image_url.split(',').filter(Boolean) : [];
+    urls.splice(index, 1);
+    set('image_url', urls.join(','));
+    setImgPreviews(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleCreate = async () => {
     if (!form.user_id) { toast.error('Please select a client'); return; }
@@ -139,13 +165,40 @@ function CreateDrawer({ users, onClose, onCreated }) {
             <h3 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--ae-ink-faint)' }}>Car Information</h3>
             <div className="grid grid-cols-2 gap-3">
               {CAR_FIELDS.map(({ key, label, type }) => (
-                <div key={key} className={key === 'image_url' ? 'col-span-2' : ''}>
+                <div key={key}>
                   <L>{label}</L>
                   <input type={type === 'number' ? 'number' : type === 'date' ? 'date' : 'text'}
                     className="input-field text-sm" value={form[key] || ''}
                     onChange={e => set(key, e.target.value)} />
                 </div>
               ))}
+            </div>
+
+            <div className="mt-4">
+              <L>Car Images</L>
+              <input ref={imgInputRef} type="file" accept="image/*" multiple className="hidden"
+                onChange={e => handleImageFiles(e.target.files)} />
+              {imgPreviews.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {imgPreviews.map((img, i) => (
+                    <div key={i} className="relative rounded-xl overflow-hidden" style={{ aspectRatio: '4/3' }}>
+                      <img src={resolveImageUrl(img.url)} alt="" className="w-full h-full object-cover" />
+                      <button onClick={() => removeImage(i)}
+                        className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 hover:bg-red-500 transition-colors"
+                        style={{ color: '#fff' }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button type="button" disabled={imgUploading}
+                onClick={() => imgInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border-2 border-dashed w-full justify-center hover:opacity-80 transition-opacity disabled:opacity-50"
+                style={{ borderColor: 'var(--ae-glass-border)', color: 'var(--ae-ink-faint)' }}>
+                <ImagePlus size={16} />
+                {imgUploading ? 'Uploading…' : imgPreviews.length > 0 ? 'Add More Images' : 'Upload Images'}
+              </button>
             </div>
           </div>
 
@@ -643,13 +696,20 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
 
           {drawerTab === 'details' && (
             <div className="space-y-6">
-              {purchase.image_url && (
-                <div className="w-full h-40 rounded-2xl overflow-hidden">
-                  <img src={resolveImageUrl(purchase.image_url)}
-                    alt="" className="w-full h-full object-cover"
-                    onError={e => e.target.parentElement.style.display = 'none'} />
-                </div>
-              )}
+              {purchase.image_url && (() => {
+                const imgs = purchase.image_url.split(',').filter(Boolean);
+                return imgs.length > 0 && (
+                  <div className={`grid gap-2 ${imgs.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                    {imgs.map((url, i) => (
+                      <div key={i} className="rounded-xl overflow-hidden" style={{ aspectRatio: '4/3' }}>
+                        <img src={resolveImageUrl(url.trim())} alt=""
+                          className="w-full h-full object-cover"
+                          onError={e => e.target.parentElement.style.display = 'none'} />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-4 gap-3">
                 {FIELDS.map(({ key, label, type, col, bold, computed }) => (
                   <div key={key} className={`col-span-${col}`}>
@@ -820,7 +880,7 @@ export default function AdminJapanPurchases() {
     { label: 'Car',             render: (p) => (
       <div className="flex items-center gap-3">
         {p.image_url ? (
-          <img src={resolveImageUrl(p.image_url)} alt=""
+          <img src={resolveImageUrl(p.image_url.split(',')[0].trim())} alt=""
             className="w-10 h-8 rounded-lg object-cover shrink-0"
             onError={e => e.target.style.display = 'none'} />
         ) : (

@@ -750,7 +750,7 @@ export default function Dashboard() {
                       <tr key={p.id} className="hover:bg-surface-container-low transition-colors">
                         <td className="px-md py-sm">
                           <div className="flex items-center gap-sm">
-                            {p.image_url && <img src={resolveImageUrl(p.image_url)} alt="" className="w-10 h-8 rounded object-cover shrink-0" />}
+                            {p.image_url && <img src={resolveImageUrl(p.image_url.split(',')[0].trim())} alt="" className="w-10 h-8 rounded object-cover shrink-0" />}
                             <span className="text-body-sm font-semibold text-on-surface">{p.make} {p.model} {p.year}</span>
                           </div>
                         </td>

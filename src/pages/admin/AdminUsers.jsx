@@ -244,7 +244,7 @@ function UserDrawer({ userId, onClose, onUpdated }) {
                           className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/4 transition-colors"
                           style={{ border: '1px solid var(--ae-glass-border)', textDecoration: 'none' }}>
                           {p.image_url ? (
-                            <img src={resolveImageUrl(p.image_url)} alt=""
+                            <img src={resolveImageUrl(p.image_url.split(',')[0].trim())} alt=""
                               className="w-10 h-8 rounded-lg object-cover shrink-0"
                               onError={e => e.target.style.display='none'} />
                           ) : (

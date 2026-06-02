@@ -29,7 +29,7 @@ function PurchaseCard({ purchase }) {
       <button className="w-full text-left p-5 flex items-start gap-4" onClick={() => setOpen(o => !o)}>
         <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--ae-glass-bg)' }}>
           {purchase.image_url ? (
-            <img src={resolveImageUrl(purchase.image_url)} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display='none'} />
+            <img src={resolveImageUrl(purchase.image_url.split(',')[0].trim())} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display='none'} />
           ) : (
             <Car size={20} style={{ color: 'var(--ae-ink-faint)' }} />
           )}

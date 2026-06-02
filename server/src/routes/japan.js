@@ -1,7 +1,7 @@
 const router   = require('express').Router();
 const db       = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
-const { uploadDocument }  = require('../middleware/upload');
+const { uploadDocument, uploadJapanCarImages }  = require('../middleware/upload');
 const ExcelJS  = require('exceljs');
 const email    = require('../utils/email');
 const { normalizeDate } = require('../utils/dates');
@@ -393,6 +393,14 @@ router.put('/bids/:id', adminAuth, async (req, res) => {
 
     const [updated] = await db.query('SELECT * FROM japan_bids WHERE id = ?', [req.params.id]);
     res.json(updated[0]);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.post('/purchases/upload-images', adminAuth, uploadJapanCarImages.array('images', 20), async (req, res) => {
+  try {
+    if (!req.files?.length) return res.status(400).json({ message: 'No images uploaded' });
+    const urls = req.files.map(f => `/uploads/japan-car-images/${f.filename}`);
+    res.json({ urls });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
