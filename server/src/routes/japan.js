@@ -421,6 +421,22 @@ router.post('/purchases/manual', adminAuth, async (req, res) => {
 
     if (!user_id) return res.status(400).json({ message: 'user_id is required' });
 
+    // Duplicate chassis check — reject if this user already has a purchase with the same chassis
+    if (chassis) {
+      const [existing] = await db.query(
+        `SELECT p.id FROM japan_purchases p
+         JOIN japan_cars c ON c.pid = p.pid
+         WHERE p.user_id = ? AND c.chassis = ?
+         LIMIT 1`,
+        [user_id, chassis]
+      );
+      if (existing.length > 0) {
+        return res.status(409).json({
+          message: `A purchase with chassis number "${chassis}" already exists for this client.`,
+        });
+      }
+    }
+
     const pid = `MANUAL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
     await db.query(

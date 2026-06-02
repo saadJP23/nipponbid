@@ -6,7 +6,7 @@ import {
 import {
   getAllJapanBids, exportJapanBids, updateJapanBid,
   createJapanPurchase, getAllJapanPurchases, updateJapanPurchase,
-  uploadJapanDocument, deleteJapanDocument,
+  uploadJapanDocument, deleteJapanDocument, resolveImageUrl,
 } from '../../services/api';
 import { toDateInputValue } from '../../utils/dates';
 
@@ -126,7 +126,7 @@ function PurchaseEditor({ purchase, onSaved }) {
           {docs.map(doc => (
             <div key={doc.id} className="liquid-glass rounded-xl px-3 py-2 flex items-center gap-2">
               <FileText size={12} style={{ color: 'var(--ae-ink-faint)' }} />
-              <a href={doc.file_path} target="_blank" rel="noopener noreferrer"
+              <a href={resolveImageUrl(doc.file_path)} target="_blank" rel="noopener noreferrer"
                 className="text-xs transition-colors hover:opacity-70" style={{ color: 'var(--ae-ink-muted)' }}>{doc.name}</a>
               <button onClick={() => handleDeleteDoc(doc.id)} className="ml-1 hover:text-red-500" style={{ color: 'var(--ae-ink-faint)' }}>
                 <Trash2 size={11} />

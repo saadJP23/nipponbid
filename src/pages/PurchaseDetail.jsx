@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Download, Car, Package, Truck, MapPin, Hash, Calendar, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getPurchase } from '../services/api';
+import { getPurchase, resolveImageUrl } from '../services/api';
 import StatusBadge from '../components/StatusBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format } from 'date-fns';
@@ -138,7 +138,7 @@ export default function PurchaseDetail() {
             ) : (
               <div className="space-y-2">
                 {docs.map(doc => (
-                  <a key={doc.id} href={doc.file_path} target="_blank" rel="noreferrer"
+                  <a key={doc.id} href={resolveImageUrl(doc.file_path)} target="_blank" rel="noreferrer"
                     className="flex items-center gap-3 p-3 rounded-xl bg-dark-400 hover:bg-dark-500 transition-colors group">
                     <div className="w-9 h-9 rounded-lg bg-gold-500/10 border border-gold-500/15 flex items-center justify-center shrink-0">
                       <FileText size={15} className="text-gold-500" />

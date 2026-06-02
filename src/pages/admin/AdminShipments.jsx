@@ -8,7 +8,7 @@ import {
   getAllShipments, createShipment, updateShipment,
   getBLRequests, createBLRequest, updateBLRequest,
   uploadShipmentDoc, uploadBLDoc,
-  getAdminOthers, createAdminOther, updateAdminOther, deleteAdminOther,
+  getAdminOthers, createAdminOther, updateAdminOther, deleteAdminOther, resolveImageUrl,
 } from '../../services/api';
 import { format } from 'date-fns';
 import { toDateInputValue } from '../../utils/dates';
@@ -258,7 +258,7 @@ export default function AdminShipments() {
                 <L>Attach Document (PDF, JPG, PNG)</L>
                 <div className="flex items-center gap-3 flex-wrap mt-1">
                   {editing && form.document_path && !formFile && (
-                    <a href={form.document_path} target="_blank" rel="noreferrer"
+                    <a href={resolveImageUrl(form.document_path)} target="_blank" rel="noreferrer"
                       className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg hover:opacity-80 transition-opacity"
                       style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>
                       <FileText size={12} /> {form.document_name || 'Current File'} — click to view
@@ -317,7 +317,7 @@ export default function AdminShipments() {
                 <L>Attach Document (PDF, JPG, PNG)</L>
                 <div className="flex items-center gap-3 flex-wrap mt-1">
                   {editingBL && blForm.document_path && !blFormFile && (
-                    <a href={blForm.document_path} target="_blank" rel="noreferrer"
+                    <a href={resolveImageUrl(blForm.document_path)} target="_blank" rel="noreferrer"
                       className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg hover:opacity-80 transition-opacity"
                       style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>
                       <FileText size={12} /> {blForm.document_name || 'Current File'} — click to view
@@ -526,7 +526,7 @@ export default function AdminShipments() {
                           {format(new Date(o.created_at), 'dd MMM yyyy, h:mm a')}
                         </p>
                         {o.file_path && (
-                          <a href={o.file_path} target="_blank" rel="noreferrer"
+                          <a href={resolveImageUrl(o.file_path)} target="_blank" rel="noreferrer"
                             className="flex items-center gap-1 text-xs hover:opacity-80 transition-opacity"
                             style={{ color: '#60a5fa' }}>
                             <FileText size={11} /> {o.file_name || 'View File'}

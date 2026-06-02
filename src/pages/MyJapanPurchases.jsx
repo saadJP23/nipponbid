@@ -104,7 +104,7 @@ function PurchaseCard({ purchase }) {
                 <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--ae-ink-faint)' }}>Documents</p>
                 <div className="space-y-2">
                   {purchase.documents.map(doc => (
-                    <a key={doc.id} href={doc.file_path} target="_blank" rel="noopener noreferrer"
+                    <a key={doc.id} href={resolveImageUrl(doc.file_path)} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-black/[0.03] transition-colors group">
                       <FileText size={14} className="shrink-0" style={{ color: 'var(--ae-ink-faint)' }} />
                       <div className="flex-1 min-w-0">

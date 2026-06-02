@@ -247,7 +247,7 @@ function FileUploadBtn({ currentPath, currentName, onUpload, uploading }) {
   return (
     <div className="flex items-center gap-2 flex-wrap mt-1">
       {currentPath && (
-        <a href={currentPath} target="_blank" rel="noreferrer"
+        <a href={resolveImageUrl(currentPath)} target="_blank" rel="noreferrer"
           className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg hover:opacity-80"
           style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>
           <FileText size={11} /> {currentName || 'View File'}
@@ -419,7 +419,7 @@ function ShipmentTab({ purchase }) {
                 const name = (bl.document_name || '').split(',').filter(Boolean)[i] || p.split('/').pop();
                 return (
                   <div key={i} className="flex items-center gap-2">
-                    <a href={p} target="_blank" rel="noreferrer"
+                    <a href={resolveImageUrl(p)} target="_blank" rel="noreferrer"
                       className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg hover:opacity-80 flex-1 min-w-0 truncate"
                       style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}>
                       <FileText size={11} className="shrink-0" /> {name}
@@ -503,7 +503,7 @@ function ShipmentTab({ purchase }) {
                   </div>
                   {o.description && <p className="text-xs mt-0.5" style={{ color: 'var(--ae-ink-faint)' }}>{o.description}</p>}
                   {o.file_path && (
-                    <a href={o.file_path} target="_blank" rel="noreferrer"
+                    <a href={resolveImageUrl(o.file_path)} target="_blank" rel="noreferrer"
                       className="flex items-center gap-1 text-xs mt-1 hover:opacity-80"
                       style={{ color: '#60a5fa' }}>
                       <FileText size={11} /> {o.file_name || 'View File'}
@@ -764,7 +764,7 @@ function EditDrawer({ purchaseId, onClose, onSaved, onDeleteRequest }) {
                         <p className="text-sm truncate" style={{ color: 'var(--ae-ink)' }}>{doc.name}</p>
                         <p className="text-xs" style={{ color: 'var(--ae-ink-faint)' }}>{doc.type} · {date(doc.uploaded_at)}</p>
                       </div>
-                      <a href={doc.file_path} target="_blank" rel="noreferrer"
+                      <a href={resolveImageUrl(doc.file_path)} target="_blank" rel="noreferrer"
                         className="p-1.5 rounded-lg hover:opacity-70" style={{ color: '#60a5fa' }}>
                         <ExternalLink size={13} />
                       </a>
