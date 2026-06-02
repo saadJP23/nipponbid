@@ -5,7 +5,8 @@ const { auth, adminAuth } = require('../middleware/auth');
 const buildLedger = async (userId) => {
   const [remRows] = await db.query(
     `SELECT 'remittance' as entry_type, ref_no as ref, IFNULL(name, ref_no) as description,
-            deposit_amount as credit, 0 as debit, confirmed_at as entry_date, id as source_id
+            deposit_amount as credit, 0 as debit,
+            COALESCE(tt_date, DATE(confirmed_at), created_at) as entry_date, id as source_id
      FROM remittances WHERE user_id = ? AND status = 'confirmed'`,
     [userId]
   );
@@ -28,7 +29,8 @@ const buildLedger = async (userId) => {
     `SELECT 'purchase' as entry_type,
             CONCAT('JP-', p.pid) as ref,
             CONCAT('Japan Purchase - ', c.make, ' ', c.model, ' (', c.year, ')') as description,
-            0 as credit, p.total as debit, p.updated_at as entry_date, p.id as source_id
+            0 as credit, p.total as debit,
+            COALESCE(c.auction_date, DATE(p.created_at)) as entry_date, p.id as source_id
      FROM japan_purchases p
      JOIN japan_cars c ON c.pid = p.pid
      WHERE p.user_id = ? AND p.total IS NOT NULL AND p.total > 0`,
