@@ -56,7 +56,11 @@ router.get('/stats', adminAuth, async (req, res) => {
 
     const [[{ total_purchases }]] = await db.query(`SELECT COUNT(sp.id) as total_purchases ${BASE}`, shinP);
     const [[{ total_revenue }]]   = await db.query(`SELECT COALESCE(SUM(COALESCE(sp.commission,0) + COALESCE(sp.auction_commission,0)), 0) as total_revenue ${BASE}`, shinP);
-    const [[{ total_billed }]]    = await db.query(`SELECT COALESCE(SUM(sp.total), 0) as total_billed ${BASE}`, shinP);
+    const [[{ total_billed_cars }]] = await db.query(`SELECT COALESCE(SUM(sp.total), 0) as total_billed_cars ${BASE}`, shinP);
+    const [[{ total_billed_parts }]] = await db.query(
+      `SELECT COALESCE(SUM(total), 0) as total_billed_parts FROM japan_parts_purchases`
+    );
+    const total_billed = Number(total_billed_cars) + Number(total_billed_parts);
     const [[{ total_received }]]  = await db.query(`SELECT COALESCE(SUM(r.deposit_amount), 0) as total_received FROM remittances r ${remJoin} ${remW}`, remP);
     const remittance_confirmed = Number(total_received);
 
@@ -143,6 +147,14 @@ router.get('/stats', adminAuth, async (req, res) => {
        ORDER BY total_billed DESC`,
       shinP
     );
+    // Parts billed per user
+    const [perUserParts] = await db.query(
+      `SELECT user_id, COALESCE(SUM(total),0) as parts_billed
+       FROM japan_parts_purchases GROUP BY user_id`
+    );
+    const partsMap = {};
+    perUserParts.forEach(r => { partsMap[r.user_id] = Number(r.parts_billed); });
+
     const [perUserRec] = await db.query(
       `SELECT r.user_id, COALESCE(SUM(r.deposit_amount), 0) as received
        FROM remittances r ${remJoin} ${remW}
@@ -153,10 +165,10 @@ router.get('/stats', adminAuth, async (req, res) => {
     perUserRec.forEach(r => { receivedMap[r.user_id] = Number(r.received); });
     const customer_summary = customer_rows.map(row => ({
       ...row,
-      total_billed:    Number(row.total_billed),
+      total_billed:    Number(row.total_billed) + (partsMap[row.id] || 0),
       total_commission:Number(row.total_commission),
       total_received:  receivedMap[row.id] || 0,
-      balance:         (receivedMap[row.id] || 0) - Number(row.total_billed),
+      balance:         (receivedMap[row.id] || 0) - Number(row.total_billed) - (partsMap[row.id] || 0),
     }));
 
     const [users_list] = await db.query(
@@ -246,8 +258,13 @@ router.get('/users/:id', adminAuth, async (req, res) => {
       "SELECT COALESCE(SUM(total),0) as total FROM japan_purchases WHERE user_id = ? AND total > 0",
       [req.params.id]
     );
+    const [partsRows] = await db.query(
+      "SELECT COALESCE(SUM(total),0) as total FROM japan_parts_purchases WHERE user_id = ?",
+      [req.params.id]
+    );
     const totalCredit = Number(remRows[0].total);
-    const totalDebit  = Number(proRows[0].total) + Number(finRows[0].total) + Number(shinRows[0].total);
+    const totalDebit  = Number(proRows[0].total) + Number(finRows[0].total) +
+                        Number(shinRows[0].total) + Number(partsRows[0].total);
     res.json({ ...user, totalCredit, totalDebit, balance: totalCredit - totalDebit });
   } catch (err) {
     res.status(500).json({ message: err.message });
