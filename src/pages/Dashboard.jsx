@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   getAdminStats,
-  getAllJapanBids,
   getMyJapanBids,
   getMyJapanPurchases,
   getMyParts,
@@ -161,38 +160,49 @@ function RevenueChart({ data, receivedData, isFiltered }) {
       </div>
 
       {!hasAny ? (
-        <div className="h-44 flex items-center justify-center"><p className="text-body-sm text-on-surface-variant">No data for this period</p></div>
+        <div style={{ height: 200 }} className="flex items-center justify-center">
+          <p className="text-body-sm text-on-surface-variant">No data for this period</p>
+        </div>
       ) : (
         <>
-          <div className="flex items-end gap-1 h-44 mb-1">
+          {/* Bar chart — fixed pixel heights so bars always render correctly */}
+          <div className="flex items-end gap-[3px]" style={{ height: 180, marginBottom: 4 }}>
             {months.map((m, i) => {
-              const bH = m.billed   > 0 ? Math.max(4, (m.billed   / peak) * 100) : 0
-              const rH = m.received > 0 ? Math.max(4, (m.received / peak) * 100) : 0
+              const BAR_MAX = 160
+              const bH = m.billed   > 0 ? Math.max(4, (m.billed   / peak) * BAR_MAX) : 0
+              const rH = m.received > 0 ? Math.max(4, (m.received / peak) * BAR_MAX) : 0
               const isLatest = i === months.length - 1
               return (
-                <div key={m.key} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-                  {/* Tooltip */}
+                <div key={m.key} className="flex-1 flex flex-col items-center justify-end group relative"
+                     style={{ height: 180 }}>
+                  {/* Hover tooltip */}
                   {(m.billed > 0 || m.received > 0) && (
-                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 rounded-lg px-2.5 py-2 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl text-left"
-                      style={{ background:'#0F1729', color:'#fff', minWidth:130 }}>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 rounded-lg px-2.5 py-2 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl text-left"
+                      style={{ background:'#0F1729', color:'#fff', minWidth: 130 }}>
                       <p className="font-bold mb-0.5">{m.label} {m.key.slice(0,4)}</p>
-                      {m.billed > 0 && <p><span style={{color:'#fca5a5'}}>Billed: </span>{fmtJpy(m.billed)} ({m.sales} car{m.sales!==1?'s':''})</p>}
+                      {m.billed   > 0 && <p><span style={{color:'#fca5a5'}}>Billed: </span>{fmtJpy(m.billed)} ({m.sales} car{m.sales!==1?'s':''})</p>}
                       {m.received > 0 && <p><span style={{color:'#6ee7b7'}}>Received: </span>{fmtJpy(m.received)} ({m.payments} pmt{m.payments!==1?'s':''})</p>}
                       {m.billed > 0 && m.received > 0 && (
                         <p className="mt-0.5 pt-0.5 border-t border-white/20">
-                          <span style={{color: m.billed>m.received?'#fbbf24':'#34d399'}}>
-                            {m.billed>m.received ? `Gap: -${fmtJpy(m.billed-m.received)}` : `Surplus: +${fmtJpy(m.received-m.billed)}`}
+                          <span style={{color: m.billed > m.received ? '#fbbf24' : '#34d399'}}>
+                            {m.billed > m.received
+                              ? `Gap: -${fmtJpy(m.billed - m.received)}`
+                              : `Surplus: +${fmtJpy(m.received - m.billed)}`}
                           </span>
                         </p>
                       )}
                     </div>
                   )}
-                  {/* Bars */}
-                  <div className="w-full flex items-end justify-center gap-[1px] h-full">
-                    <div className="flex-1 rounded-t transition-all duration-500" style={{ height:`${bH}%`, background: isLatest?'#b7102a':'#b7102a88', minHeight: m.billed>0?4:0 }} />
-                    <div className="flex-1 rounded-t transition-all duration-500" style={{ height:`${rH}%`, background: isLatest?'#059669':'#05966988', minHeight: m.received>0?4:0 }} />
+                  {/* Bars — pixel heights, always correct */}
+                  <div className="w-full flex items-end justify-center gap-[1px]">
+                    <div className="flex-1 rounded-t transition-all duration-500"
+                         style={{ height: bH, background: isLatest ? '#b7102a' : '#b7102a88' }} />
+                    <div className="flex-1 rounded-t transition-all duration-500"
+                         style={{ height: rH, background: isLatest ? '#059669' : '#05966988' }} />
                   </div>
-                  <span className={`text-[9px] leading-none mt-0.5 ${isLatest?'font-bold text-primary':'text-on-surface-variant'}`}>{m.label}</span>
+                  <span className={`text-[9px] leading-none mt-1 ${isLatest ? 'font-bold text-primary' : 'text-on-surface-variant'}`}>
+                    {m.label}
+                  </span>
                 </div>
               )
             })}
@@ -437,13 +447,11 @@ export default function Dashboard() {
 
     Promise.all([
       getAdminStats(params),
-      filterActive ? Promise.resolve({ data: { bids: [] } }) : getAllJapanBids({ limit: 6 }),
     ])
-      .then(([statsRes, bidsRes]) => {
+      .then(([statsRes]) => {
         const d = statsRes.data
         const s = d.stats
         const recentPurchases = d.recent_purchases ?? []
-        const shinchBids      = bidsRes.data.bids   ?? []
 
         setAdminData(d)
 
@@ -454,25 +462,16 @@ export default function Dashboard() {
           revenue:     fmtJpy(s.total_revenue ?? 0),
         })
 
-        if (!filterActive && shinchBids.length > 0) {
-          setTableRows(shinchBids.map(b => ({
-            car:     `${b.year ?? ''} ${b.make ?? ''} ${b.model ?? ''}`.trim() || '—',
-            auction: b.auction_house ?? '—',
-            grade:   b.grade ?? '—',
-            price:   fmtJpy(b.amount),
-            status:  b.status ?? 'pending',
-            date:    fmtDate(b.auction_date),
-          })))
-        } else {
-          setTableRows(recentPurchases.slice(0, 6).map(p => ({
-            car:     `${p.year ?? ''} ${p.make ?? ''} ${p.model ?? ''}`.trim() || '—',
-            auction: p.auction_house ?? '—',
-            grade:   '—',
-            price:   fmtJpy(p.total),
-            status:  'purchased',
-            date:    fmtDate(p.auction_date),
-          })))
-        }
+        // Always show last 5 purchases in the recent table
+        setTableRows(recentPurchases.slice(0, 5).map(p => ({
+          id:      p.id,
+          car:     `${p.year ?? ''} ${p.make ?? ''} ${p.model ?? ''}`.trim() || '—',
+          client:  p.user_name ?? '—',
+          auction: p.auction_house ?? '—',
+          price:   fmtJpy(p.total),
+          status:  'purchased',
+          date:    fmtDate(p.auction_date || p.created_at),
+        })))
 
         setSummaryRows(filterActive ? [
           { label: 'Purchases (filtered)', val: s.total_purchases  ?? 0 },
@@ -545,36 +544,36 @@ export default function Dashboard() {
 
       {isAdmin && (
         <div className="bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md mb-lg">
-          <div className="flex flex-wrap gap-sm items-end">
-            <div className="flex items-center gap-xs text-on-surface-variant text-body-sm font-medium shrink-0 self-center">
-              <span className="material-symbols-outlined text-[16px] text-secondary">filter_list</span>
-              <span>Filter</span>
-              {hasActive && (
-                <span className="bg-secondary/10 text-secondary text-label-sm px-xs py-0.5 rounded-full">Active</span>
-              )}
-            </div>
-
+          <div className="flex items-center gap-xs mb-sm">
+            <span className="material-symbols-outlined text-[16px] text-secondary">filter_list</span>
+            <span className="text-on-surface-variant text-body-sm font-medium">Filter</span>
+            {hasActive && (
+              <span className="bg-secondary/10 text-secondary text-label-sm px-xs py-0.5 rounded-full">Active</span>
+            )}
+            {filterLoading && (
+              <span className="text-label-sm text-on-surface-variant ml-auto">Refreshing…</span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-sm">
             <div className="flex flex-col gap-0.5">
               <label className="text-label-sm text-on-surface-variant">From</label>
               <input type="date" value={draft.dateFrom}
                 onChange={e => setDraft(d => ({ ...d, dateFrom: e.target.value }))}
-                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface w-36 focus:outline-none focus:border-primary/40"
+                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface w-full focus:outline-none focus:border-primary/40"
               />
             </div>
-
             <div className="flex flex-col gap-0.5">
               <label className="text-label-sm text-on-surface-variant">To</label>
               <input type="date" value={draft.dateTo}
                 onChange={e => setDraft(d => ({ ...d, dateTo: e.target.value }))}
-                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface w-36 focus:outline-none focus:border-primary/40"
+                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface w-full focus:outline-none focus:border-primary/40"
               />
             </div>
-
             <div className="flex flex-col gap-0.5">
               <label className="text-label-sm text-on-surface-variant">Customer</label>
               <select value={draft.userId}
                 onChange={e => setDraft(d => ({ ...d, userId: e.target.value }))}
-                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface min-w-[150px] focus:outline-none focus:border-primary/40"
+                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface w-full focus:outline-none focus:border-primary/40"
               >
                 <option value="">All Customers</option>
                 {users_list.map(u => (
@@ -582,12 +581,11 @@ export default function Dashboard() {
                 ))}
               </select>
             </div>
-
             <div className="flex flex-col gap-0.5">
               <label className="text-label-sm text-on-surface-variant">Country</label>
               <select value={draft.country}
                 onChange={e => setDraft(d => ({ ...d, country: e.target.value }))}
-                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface min-w-[130px] focus:outline-none focus:border-primary/40"
+                className="border border-outline-variant/50 rounded-lg px-xs py-1.5 text-body-sm bg-surface-container text-on-surface w-full focus:outline-none focus:border-primary/40"
               >
                 <option value="">All Countries</option>
                 {countries_list.map(c => (
@@ -595,22 +593,17 @@ export default function Dashboard() {
                 ))}
               </select>
             </div>
-
-            <div className="flex items-end gap-xs">
-              <button onClick={handleApply}
-                className="bg-primary text-white px-md py-1.5 rounded-lg text-body-sm font-semibold hover:bg-primary/90 transition-colors">
-                Apply
+          </div>
+          <div className="flex items-center gap-xs mt-sm">
+            <button onClick={handleApply}
+              className="bg-primary text-white px-md py-1.5 rounded-lg text-body-sm font-semibold hover:bg-primary/90 transition-colors">
+              Apply
+            </button>
+            {hasActive && (
+              <button onClick={handleClear}
+                className="flex items-center gap-1 text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1.5">
+                <span className="material-symbols-outlined text-[14px]">close</span> Clear
               </button>
-              {hasActive && (
-                <button onClick={handleClear}
-                  className="flex items-center gap-1 text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1.5">
-                  <span className="material-symbols-outlined text-[14px]">close</span> Clear
-                </button>
-              )}
-            </div>
-
-            {filterLoading && (
-              <span className="text-label-sm text-on-surface-variant self-center ml-auto">Refreshing…</span>
             )}
           </div>
         </div>
@@ -640,39 +633,44 @@ export default function Dashboard() {
       <div className="grid grid-cols-12 gap-md mb-md">
         <div className="col-span-12 xl:col-span-8 bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 overflow-hidden">
           <div className="px-md py-sm border-b border-outline-variant/30 flex justify-between items-center">
-            <h3 className="text-headline-sm font-semibold text-primary">Recent Auction Results</h3>
-            <Link to={isAdmin ? '/admin/bids' : '/my-bids'} className="text-secondary text-body-sm font-semibold hover:underline">View All</Link>
+            <h3 className="text-headline-sm font-semibold text-primary">
+              {isAdmin ? 'Recent Purchases' : 'Recent Auction Results'}
+            </h3>
+            <Link to={isAdmin ? '/admin/purchases' : '/my-japan-purchases'} className="text-secondary text-body-sm font-semibold hover:underline">View All</Link>
           </div>
           {loading ? (
             <div className="p-lg space-y-sm">
-              {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded skeleton" />)}
+              {[...Array(5)].map((_, i) => <div key={i} className="h-10 rounded skeleton" />)}
             </div>
           ) : tableRows.length === 0 ? (
-            <div className="p-xl text-center text-on-surface-variant text-body-sm">No auction activity yet.</div>
+            <div className="p-xl text-center text-on-surface-variant text-body-sm">No purchases yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-surface-container-low">
-                    {['Car Model', 'Auction', 'Grade', 'Price', 'Status', 'Date'].map(h => (
+                    {(isAdmin
+                      ? ['Car', 'Client', 'Auction', 'Total', 'Date']
+                      : ['Car Model', 'Auction', 'Price', 'Status', 'Date']
+                    ).map(h => (
                       <th key={h} className="px-md py-xs text-label-sm text-on-surface-variant uppercase tracking-wide font-semibold border-b border-outline-variant/30 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/20">
                   {tableRows.map((r, i) => (
-                    <tr key={i} className="hover:bg-surface-container-low transition-colors">
+                    <tr key={r.id ?? i} className="hover:bg-surface-container-low transition-colors">
                       <td className="px-md py-sm text-body-sm font-semibold text-on-surface">{r.car}</td>
+                      {isAdmin && <td className="px-md py-sm text-body-sm text-on-surface-variant">{r.client}</td>}
                       <td className="px-md py-sm text-body-sm text-on-surface-variant">{r.auction}</td>
-                      <td className="px-md py-sm">
-                        <span className="bg-surface-container px-xs py-[2px] rounded text-on-surface text-body-sm font-mono-data font-bold">{r.grade}</span>
-                      </td>
                       <td className="px-md py-sm text-body-sm font-mono-data text-on-surface">{r.price}</td>
-                      <td className="px-md py-sm">
-                        <span className={`${STATUS_STYLE[r.status] ?? STATUS_STYLE.pending} text-[10px] font-bold px-xs py-[2px] rounded uppercase tracking-wide`}>
-                          {r.status}
-                        </span>
-                      </td>
+                      {!isAdmin && (
+                        <td className="px-md py-sm">
+                          <span className={`${STATUS_STYLE[r.status] ?? STATUS_STYLE.pending} text-[10px] font-bold px-xs py-[2px] rounded uppercase tracking-wide`}>
+                            {r.status}
+                          </span>
+                        </td>
+                      )}
                       <td className="px-md py-sm text-body-sm text-on-surface-variant whitespace-nowrap">{r.date}</td>
                     </tr>
                   ))}
@@ -762,6 +760,42 @@ export default function Dashboard() {
               receivable={stats.receivable_amount || 0}
             />
           </div>
+
+          {adminData.recent_bids?.length > 0 && (
+            <div className="bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 overflow-hidden mb-md">
+              <div className="px-md py-sm border-b border-outline-variant/30 flex justify-between items-center">
+                <div className="flex items-center gap-xs">
+                  <span className="material-symbols-outlined text-amber-500 text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>gavel</span>
+                  <h3 className="text-headline-sm font-semibold text-primary">Pending Bids Awaiting Result</h3>
+                  <span className="bg-amber-100 text-amber-700 text-label-sm font-bold px-xs py-0.5 rounded-full">{adminData.recent_bids.length}</span>
+                </div>
+                <Link to="/admin/bids" className="text-secondary text-body-sm font-semibold hover:underline flex items-center gap-1">
+                  View All <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                </Link>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-surface-container-low">
+                      {['Car', 'Client', 'Bid Amount', 'Date'].map(h => (
+                        <th key={h} className="px-md py-xs text-label-sm text-on-surface-variant uppercase tracking-wide font-semibold border-b border-outline-variant/30 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/20">
+                    {adminData.recent_bids.map(b => (
+                      <tr key={b.id} className="hover:bg-surface-container-low transition-colors">
+                        <td className="px-md py-sm text-body-sm font-semibold text-on-surface">{b.year} {b.make} {b.model}</td>
+                        <td className="px-md py-sm text-body-sm text-on-surface-variant">{b.user_name}</td>
+                        <td className="px-md py-sm text-body-sm font-mono-data text-on-surface">¥{Number(b.amount).toLocaleString()}</td>
+                        <td className="px-md py-sm text-body-sm text-on-surface-variant whitespace-nowrap">{fmtDate(b.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="grid lg:grid-cols-2 gap-md mb-md">
             <RevenueChart data={adminData.monthly_revenue} receivedData={adminData.monthly_received} isFiltered={!!(applied.dateFrom || applied.dateTo)} />

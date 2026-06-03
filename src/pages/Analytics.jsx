@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getAdminStats, getMyJapanBids, getMyJapanPurchases, getMyParts } from '../services/api'
+import { getAdminStats, getMyJapanBids, getMyJapanPurchases } from '../services/api'
 import toast from 'react-hot-toast'
 
 function fmtJpy(n) {
@@ -33,7 +33,6 @@ function BarChart({ data, receivedData }) {
 
   return (
     <div className="relative">
-      {/* Y-axis grid */}
       <div className="absolute inset-0 flex flex-col justify-between pointer-events-none" style={{ bottom: 28, top: 0 }}>
         {[100,75,50,25].map(g => (
           <div key={g} className="flex items-center gap-2 w-full">
@@ -87,10 +86,9 @@ function BarChart({ data, receivedData }) {
 
 function MakeBars({ makes }) {
   if (!makes || makes.length === 0) {
-    return <p className="text-body-sm text-on-surface-variant text-center py-md">No stock data available</p>
+    return <p className="text-body-sm text-on-surface-variant text-center py-md">No data available</p>
   }
   const maxCount = Math.max(...makes.map(m => m.count), 1)
-  const total    = makes.reduce((s, m) => s + m.count, 0)
   return (
     <div className="space-y-sm">
       {makes.map(m => (
@@ -109,43 +107,138 @@ function MakeBars({ makes }) {
   )
 }
 
-const PIE_DATA = [
-  { label: 'USS Tokyo',   pct: 40, color: '#0F1729' },
-  { label: 'TAA Group',   pct: 30, color: '#457b9d' },
-  { label: 'JU Network',  pct: 20, color: '#76777d' },
-  { label: 'Others',      pct: 10, color: '#c6c6cd' },
-]
+function BidResultsChart({ bidStats }) {
+  const won     = bidStats.find(s => s.status === 'won')?.count     ?? 0
+  const lost    = bidStats.find(s => s.status === 'lost')?.count    ?? 0
+  const pending = bidStats.find(s => s.status === 'pending')?.count ?? 0
+  const total   = won + lost + pending
+  const decided = won + lost
+  const winRate = decided > 0 ? Math.round((won / decided) * 100) : 0
 
-function DonutChart({ winRate }) {
-  const cx = 80, cy = 80, r = 60, strokeW = 28
+  if (total === 0) {
+    return (
+      <div className="h-[200px] flex items-center justify-center">
+        <p className="text-body-sm text-on-surface-variant">No bid data yet</p>
+      </div>
+    )
+  }
+
+  const cx = 70, cy = 70, r = 52, strokeW = 22
   const circ = 2 * Math.PI * r
+  const segments = [
+    { label: 'Won',     count: won,     pct: decided > 0 ? (won/total)*100 : 0,     color: '#059669' },
+    { label: 'Lost',    count: lost,    pct: decided > 0 ? (lost/total)*100 : 0,    color: '#b7102a' },
+    { label: 'Pending', count: pending, pct: pending > 0 ? (pending/total)*100 : 0, color: '#d97706' },
+  ]
+
   let offset = 0
   return (
-    <div className="flex flex-col items-center">
-      <svg width="160" height="160" viewBox="0 0 160 160">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e1e3e4" strokeWidth={strokeW} />
-        {PIE_DATA.map((seg, i) => {
-          const dashLen = (seg.pct / 100) * circ
-          offset += seg.pct
-          return (
-            <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-                    stroke={seg.color} strokeWidth={strokeW}
-                    strokeDasharray={`${dashLen} ${circ}`}
-                    strokeDashoffset={circ / 4 - (offset - seg.pct) * (circ / 100)}
-                    transform="rotate(-90 80 80)" />
-          )
-        })}
-        <text x="80" y="76" textAnchor="middle" fontSize="12" fill="#191c1d" fontWeight="700">{winRate}%</text>
-        <text x="80" y="92" textAnchor="middle" fontSize="10" fill="#76777d">Win Rate</text>
-      </svg>
-      <div className="grid grid-cols-2 gap-x-lg gap-y-[6px] mt-sm w-full">
-        {PIE_DATA.map(s => (
-          <div key={s.label} className="flex items-center gap-xs">
-            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-            <span className="text-label-sm text-on-surface-variant truncate">{s.label}</span>
-            <span className="text-label-sm font-bold text-on-surface ml-auto">{s.pct}%</span>
+    <div className="flex flex-col items-center gap-4">
+      <div className="flex items-center gap-6">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e1e3e4" strokeWidth={strokeW} />
+          {segments.map((seg, i) => {
+            const dashLen = (seg.pct / 100) * circ
+            const prevOffset = offset
+            offset += seg.pct
+            return (
+              <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+                      stroke={seg.color} strokeWidth={strokeW}
+                      strokeDasharray={`${dashLen} ${circ}`}
+                      strokeDashoffset={circ / 4 - prevOffset * (circ / 100)}
+                      transform="rotate(-90 70 70)" />
+            )
+          })}
+          <text x="70" y="66" textAnchor="middle" fontSize="13" fill="#191c1d" fontWeight="700">{winRate}%</text>
+          <text x="70" y="82" textAnchor="middle" fontSize="10" fill="#76777d">Win Rate</text>
+        </svg>
+
+        <div className="space-y-2">
+          {[
+            { label: 'Won',     count: won,     color: '#059669' },
+            { label: 'Lost',    count: lost,    color: '#b7102a' },
+            { label: 'Pending', count: pending, color: '#d97706' },
+            { label: 'Total',   count: total,   color: '#76777d' },
+          ].map(s => (
+            <div key={s.label} className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+              <span className="text-label-sm text-on-surface-variant w-14">{s.label}</span>
+              <span className="text-label-sm font-bold text-on-surface font-mono-data">{s.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {decided > 0 && (
+        <p className="text-label-sm text-on-surface-variant text-center">
+          {won} won from {decided} decided bids ·{' '}
+          <span className="font-bold text-green-700">{winRate}% win rate</span>
+        </p>
+      )}
+    </div>
+  )
+}
+
+function CustomerSummaryChart({ customers }) {
+  if (!customers || customers.length === 0) return null
+  const pct = (part, total) => (!total || !part) ? 0 : Math.min(100, Math.round((part / total) * 100))
+  return (
+    <div className="space-y-3">
+      {customers.slice(0, 6).map(c => {
+        const collPct = pct(c.total_received, c.total_billed)
+        const neg = c.balance < 0
+        return (
+          <div key={c.id} className="p-3 rounded-xl bg-surface-container">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <p className="text-body-sm font-semibold text-on-surface">{c.name}</p>
+                {c.country && <p className="text-label-sm text-on-surface-variant">{c.country} · {c.purchases} car{c.purchases !== 1 ? 's' : ''}</p>}
+              </div>
+              <span className={`text-label-sm font-semibold px-2 py-0.5 rounded-full ${neg ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                {neg ? `¥${Math.abs(c.balance).toLocaleString()} owed` : `¥${c.balance.toLocaleString()} credit`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${collPct}%` }} />
+              </div>
+              <span className="text-label-sm text-on-surface-variant w-10 text-right">{collPct}%</span>
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-[10px] text-on-surface-variant">Billed: ¥{Number(c.total_billed).toLocaleString()}</span>
+              <span className="text-[10px] text-green-700">Received: ¥{Number(c.total_received).toLocaleString()}</span>
+            </div>
           </div>
-        ))}
+        )
+      })}
+    </div>
+  )
+}
+
+function CommissionByCustomer({ customers }) {
+  if (!customers || customers.length === 0) return null
+  const total  = customers.reduce((s, c) => s + (c.total_commission || 0), 0)
+  if (!total) return null
+  const colors = ['#b7102a', '#2563eb', '#059669', '#7c3aed', '#db2777', '#0891b2']
+  return (
+    <div className="space-y-3">
+      {customers.filter(c => c.total_commission > 0).map((c, i) => {
+        const p = total > 0 ? Math.round((c.total_commission / total) * 100) : 0
+        return (
+          <div key={c.id}>
+            <div className="flex justify-between text-body-sm mb-1">
+              <span className="text-on-surface-variant truncate pr-2">{c.name}</span>
+              <span className="font-mono-data text-on-surface shrink-0">¥{Number(c.total_commission).toLocaleString()} <span className="text-on-surface-variant">({p}%)</span></span>
+            </div>
+            <div className="h-1.5 rounded-full bg-surface-container overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p}%`, background: colors[i % colors.length] }} />
+            </div>
+          </div>
+        )
+      })}
+      <div className="pt-2 border-t border-outline-variant/30 flex justify-between text-body-sm">
+        <span className="text-on-surface-variant">Total Commission</span>
+        <span className="font-mono-data font-bold text-secondary">¥{Number(total).toLocaleString()}</span>
       </div>
     </div>
   )
@@ -153,20 +246,19 @@ function DonutChart({ winRate }) {
 
 export default function Analytics() {
   const { user } = useAuth()
-  const isAdmin     = user?.role === 'admin'
-  const pageRef     = useRef(null)
+  const isAdmin  = user?.role === 'admin'
+  const pageRef  = useRef(null)
   const [exporting, setExporting] = useState(false)
 
-  const [loading, setLoading]  = useState(true)
-  const [stats, setStats]      = useState(null)
-  const [monthlyRev, setMonthlyRev] = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [monthlyRev, setMonthlyRev]   = useState([])
   const [monthlyReceived, setMonthlyReceived] = useState([])
-  const [stockMakes, setStockMakes] = useState([])
+  const [stockMakes, setStockMakes]   = useState([])
+  const [adminBidStats, setAdminBidStats] = useState([])
+  const [adminCustomers, setAdminCustomers] = useState([])
   const [winRateByHouse, setWinRateByHouse] = useState([])
-  const [bidSummary, setBidSummary] = useState(null)
-  const [kpis, setKpis]        = useState({
-    revenue: '—', cars: 0, winRate: '—', avgPrice: '—'
-  })
+  const [bidSummary, setBidSummary]   = useState(null)
+  const [kpis, setKpis] = useState({ k1: '—', k2: '—', k3: '—', k4: '—' })
 
   const handleExportPDF = async () => {
     if (!pageRef.current || exporting) return
@@ -178,10 +270,7 @@ export default function Analytics() {
         import('jspdf'),
       ])
       const canvas = await html2canvas(pageRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#f1f3f5',
-        logging: false,
+        scale: 2, useCORS: true, backgroundColor: '#f1f3f5', logging: false,
       })
       const imgData = canvas.toDataURL('image/png')
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -189,21 +278,16 @@ export default function Analytics() {
       const pageH = pdf.internal.pageSize.getHeight()
       const imgW  = pageW
       const imgH  = (canvas.height * imgW) / canvas.width
-      let yPos    = 0
-      let remaining = imgH
-
+      let yPos = 0, remaining = imgH
       while (remaining > 0) {
         pdf.addImage(imgData, 'PNG', 0, -yPos, imgW, imgH)
         remaining -= pageH
         yPos      += pageH
         if (remaining > 0) pdf.addPage()
       }
-
-      const date = new Date().toISOString().slice(0, 10)
-      pdf.save(`nipponbid-analytics-${date}.pdf`)
+      pdf.save(`nipponbid-analytics-${new Date().toISOString().slice(0, 10)}.pdf`)
       toast.success('PDF downloaded!', { id: 'pdf' })
     } catch (err) {
-      console.error(err)
       toast.error('Failed to generate PDF', { id: 'pdf' })
     } finally {
       setExporting(false)
@@ -216,22 +300,17 @@ export default function Analytics() {
         if (isAdmin) {
           const { data } = await getAdminStats()
           const s = data.stats
-          setStats(s)
-          setMonthlyRev(data.monthly_revenue ?? [])
+          setMonthlyRev(data.monthly_revenue   ?? [])
           setMonthlyReceived(data.monthly_received ?? [])
-          setStockMakes(data.stock_by_make   ?? [])
-
-          const totalBids = (s.pending_bids ?? 0) + (s.won_bids ?? 0) + (s.lost_bids ?? 0)
-          const winRate   = totalBids > 0 ? Math.round(((s.won_bids ?? 0) / totalBids) * 100) : '—'
-          const avgPrice  = s.total_purchases > 0
-            ? fmtJpy((s.total_billed ?? 0) / s.total_purchases)
-            : '—'
+          setStockMakes(data.stock_by_make     ?? [])
+          setAdminBidStats(data.bid_stats      ?? [])
+          setAdminCustomers(data.customer_summary ?? [])
 
           setKpis({
-            revenue:  fmtJpy(s.total_revenue  ?? 0),
-            cars:     s.total_purchases         ?? 0,
-            winRate:  winRate === '—' ? '—' : `${winRate}%`,
-            avgPrice,
+            k1: fmtJpy(s.total_billed     ?? 0),
+            k2: fmtJpy(s.total_received   ?? 0),
+            k3: fmtJpy(s.receivable_amount ?? 0),
+            k4: fmtJpy(s.total_revenue    ?? 0),
           })
         } else {
           const [bidsRes, purchRes] = await Promise.all([
@@ -247,19 +326,17 @@ export default function Analytics() {
           const totalDecided = won + lost
           const winRate = totalDecided > 0 ? Math.round((won / totalDecided) * 100) : '—'
 
-          const totalSpent = allPurchases.reduce((s, p) => s + (Number(p.total) || 0), 0)
-          const avgPriceNum = allPurchases.length > 0 ? totalSpent / allPurchases.length : 0
+          const totalSpent   = allPurchases.reduce((s, p) => s + (Number(p.total) || 0), 0)
+          const avgPriceNum  = allPurchases.length > 0 ? totalSpent / allPurchases.length : 0
 
           setKpis({
-            revenue:  totalSpent > 0 ? fmtJpy(totalSpent) : '—',
-            cars:     allPurchases.length,
-            winRate:  winRate === '—' ? '—' : `${winRate}%`,
-            avgPrice: avgPriceNum > 0 ? fmtJpy(avgPriceNum) : '—',
+            k1: totalSpent > 0 ? fmtJpy(totalSpent) : '—',
+            k2: allPurchases.length,
+            k3: winRate === '—' ? '—' : `${winRate}%`,
+            k4: avgPriceNum > 0 ? fmtJpy(avgPriceNum) : '—',
           })
 
-          setBidSummary({
-            won, lost, pending, total: allBids.length,
-          })
+          setBidSummary({ won, lost, pending, total: allBids.length })
 
           const monthlyMap = {}
           allPurchases.forEach(p => {
@@ -282,31 +359,25 @@ export default function Analytics() {
           })
           setStockMakes(
             Object.entries(makeMap)
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 8)
+              .sort(([, a], [, b]) => b - a).slice(0, 8)
               .map(([make, count]) => ({ make, count }))
           )
 
           const houseMap = {}
           allBids.forEach(b => {
             if (!b.auction_house) return
-            if (!houseMap[b.auction_house]) houseMap[b.auction_house] = { won: 0, lost: 0, total: 0 }
-            houseMap[b.auction_house].total++
+            if (!houseMap[b.auction_house]) houseMap[b.auction_house] = { won: 0, lost: 0 }
             if (b.status === 'won')  houseMap[b.auction_house].won++
             if (b.status === 'lost') houseMap[b.auction_house].lost++
           })
           setWinRateByHouse(
             Object.entries(houseMap)
               .filter(([, d]) => d.won + d.lost > 0)
-              .map(([house, d]) => ({
-                house,
-                rate: Math.round((d.won / (d.won + d.lost)) * 100),
-              }))
+              .map(([house, d]) => ({ house, rate: Math.round((d.won / (d.won + d.lost)) * 100) }))
               .sort((a, b) => b.rate - a.rate)
           )
         }
       } catch (e) {
-        console.error('Analytics load error:', e)
         toast.error('Failed to load analytics')
       } finally {
         setLoading(false)
@@ -315,12 +386,24 @@ export default function Analytics() {
     load()
   }, [isAdmin])
 
-  const winRateNum = typeof kpis.winRate === 'string' && kpis.winRate.endsWith('%')
-    ? parseInt(kpis.winRate)
-    : 68
+  const kpiCards = isAdmin
+    ? [
+        { label: 'Total Billed',       val: kpis.k1, icon: 'receipt_long',    color: 'text-primary' },
+        { label: 'Total Received',      val: kpis.k2, icon: 'payments',        color: 'text-green-700' },
+        { label: 'Outstanding Balance', val: kpis.k3, icon: 'account_balance', color: 'text-orange-600' },
+        { label: 'Commission Earned',   val: kpis.k4, icon: 'monetization_on', color: 'text-secondary' },
+      ]
+    : [
+        { label: 'Total Spent',      val: kpis.k1, icon: 'payments',       color: 'text-primary' },
+        { label: 'Cars Won',         val: kpis.k2, icon: 'directions_car', color: 'text-primary' },
+        { label: 'Win Rate',         val: kpis.k3, icon: 'emoji_events',   color: 'text-primary' },
+        { label: 'Avg Price Paid',   val: kpis.k4, icon: 'calculate',      color: 'text-primary' },
+      ]
 
   return (
     <div ref={pageRef} className="p-lg bg-background min-h-full">
+
+      {/* Header */}
       <div className="flex justify-end items-center gap-sm mb-lg">
         <button className="flex items-center gap-xs px-md py-[9px] bg-surface-container-lowest border border-outline-variant rounded-lg text-body-sm font-semibold text-on-surface hover:bg-surface-container transition-colors">
           <span className="material-symbols-outlined text-[16px]">calendar_today</span>
@@ -330,7 +413,7 @@ export default function Analytics() {
         <button
           onClick={handleExportPDF}
           disabled={exporting || loading}
-          className="flex items-center gap-xs px-md py-[9px] bg-primary text-white rounded-lg text-body-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+          className="flex items-center gap-xs px-md py-[9px] bg-primary text-white rounded-lg text-body-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 shadow-sm"
         >
           {exporting
             ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -340,13 +423,9 @@ export default function Analytics() {
         </button>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-md mb-lg">
-        {[
-          { label: isAdmin ? 'Total Revenue'      : 'Total Spent',      val: kpis.revenue,  icon: 'payments' },
-          { label: isAdmin ? 'Cars Purchased'     : 'Cars Won',          val: kpis.cars,     icon: 'directions_car' },
-          { label: 'Auction Win Rate',                                    val: kpis.winRate,  icon: 'emoji_events' },
-          { label: isAdmin ? 'Avg Purchase Price' : 'Avg Price Paid',    val: kpis.avgPrice, icon: 'calculate' },
-        ].map(k => (
+        {kpiCards.map(k => (
           <div key={k.label} className="bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md">
             <div className="flex justify-between items-start mb-md">
               <div className="p-xs bg-surface-container rounded-lg">
@@ -357,13 +436,15 @@ export default function Analytics() {
             <p className="text-label-sm text-on-surface-variant">{k.label}</p>
             {loading
               ? <div className="h-7 w-20 rounded skeleton mt-0.5" />
-              : <p className="text-[26px] font-bold text-on-surface font-mono-data leading-tight mt-0.5">{k.val}</p>
+              : <p className={`text-[26px] font-bold font-mono-data leading-tight mt-0.5 ${k.color}`}>{k.val}</p>
             }
           </div>
         ))}
       </div>
 
+      {/* Main Charts Row */}
       <div className="grid grid-cols-12 gap-md mb-md">
+        {/* Monthly Billed vs Received */}
         <div className="col-span-12 xl:col-span-7 bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md">
           <div className="flex justify-between items-center mb-md">
             <h3 className="text-headline-sm font-semibold text-primary">
@@ -377,19 +458,18 @@ export default function Analytics() {
           }
         </div>
 
+        {/* Bid Results / Bid Activity */}
         <div className="col-span-12 xl:col-span-5 bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md">
           <div className="flex justify-between items-center mb-md">
             <h3 className="text-headline-sm font-semibold text-primary">
-              {isAdmin ? 'By Auction House' : 'Bid Activity'}
+              {isAdmin ? 'Bid Results' : 'Bid Activity'}
             </h3>
-            <span className="text-label-sm text-on-surface-variant">
-              {isAdmin ? 'Estimated' : 'All time'}
-            </span>
+            <span className="text-label-sm text-on-surface-variant">All time</span>
           </div>
-          {isAdmin ? (
-            <DonutChart winRate={winRateNum} />
-          ) : loading ? (
+          {loading ? (
             <div className="h-[180px] rounded skeleton" />
+          ) : isAdmin ? (
+            <BidResultsChart bidStats={adminBidStats} />
           ) : !bidSummary || bidSummary.total === 0 ? (
             <div className="h-[180px] flex items-center justify-center">
               <p className="text-body-sm text-on-surface-variant">No bids placed yet</p>
@@ -425,7 +505,9 @@ export default function Analytics() {
         </div>
       </div>
 
+      {/* Bottom Charts Row */}
       <div className="grid grid-cols-12 gap-md mb-md">
+        {/* Top Makes */}
         <div className="col-span-12 xl:col-span-6 bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md">
           <h3 className="text-headline-sm font-semibold text-primary mb-md">
             {isAdmin ? 'Top Makes Purchased' : 'My Purchased Makes'}
@@ -436,67 +518,72 @@ export default function Analytics() {
           }
         </div>
 
+        {/* Commission breakdown (admin) / Win rate by house (user) */}
         <div className="col-span-12 xl:col-span-6 bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md">
-          <h3 className="text-headline-sm font-semibold text-primary mb-md">Win Rate by Auction House</h3>
+          <h3 className="text-headline-sm font-semibold text-primary mb-md">
+            {isAdmin ? 'Commission by Customer' : 'Win Rate by Auction House'}
+          </h3>
           {loading ? (
             <div className="space-y-sm">{[...Array(4)].map((_, i) => <div key={i} className="h-8 rounded skeleton" />)}</div>
-          ) : (() => {
-            const rows = isAdmin
-              ? [
-                  { house: 'USS Tokyo',   rate: 71 },
-                  { house: 'TAA Group',   rate: 68 },
-                  { house: 'JU Network',  rate: 65 },
-                  { house: 'HAA Tokyo',   rate: 58 },
-                  { house: 'LAA Okayama', rate: 52 },
-                ]
-              : winRateByHouse
-            if (!isAdmin && rows.length === 0) {
-              return <p className="text-body-sm text-on-surface-variant text-center py-md">No completed bids yet to calculate win rates</p>
-            }
-            return (
-              <div className="space-y-sm">
-                {rows.map(w => (
-                  <div key={w.house}>
-                    <div className="flex justify-between text-body-sm mb-1">
-                      <span className="text-on-surface">{w.house}</span>
-                      <span className={`font-mono-data font-bold ${w.rate >= 65 ? 'text-green-700' : 'text-amber-700'}`}>{w.rate}%</span>
+          ) : isAdmin ? (
+            adminCustomers.length > 0
+              ? <CommissionByCustomer customers={adminCustomers} />
+              : <p className="text-body-sm text-on-surface-variant text-center py-md">No data yet</p>
+          ) : (
+            winRateByHouse.length === 0
+              ? <p className="text-body-sm text-on-surface-variant text-center py-md">No completed bids yet</p>
+              : (
+                <div className="space-y-sm">
+                  {winRateByHouse.map(w => (
+                    <div key={w.house}>
+                      <div className="flex justify-between text-body-sm mb-1">
+                        <span className="text-on-surface">{w.house}</span>
+                        <span className={`font-mono-data font-bold ${w.rate >= 65 ? 'text-green-700' : 'text-amber-700'}`}>{w.rate}%</span>
+                      </div>
+                      <div className="h-2 bg-surface-container rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-500 ${w.rate >= 65 ? 'bg-green-500' : 'bg-amber-500'}`}
+                             style={{ width: `${w.rate}%` }} />
+                      </div>
                     </div>
-                    <div className="h-2 bg-surface-container rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-500 ${w.rate >= 65 ? 'bg-green-500' : 'bg-amber-500'}`}
-                           style={{ width: `${w.rate}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
+                  ))}
+                </div>
+              )
+          )}
         </div>
       </div>
 
-      {isAdmin && !loading && stats && (
-        <div className="bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 overflow-hidden">
-          <div className="px-md py-sm border-b border-outline-variant/30 flex justify-between items-center">
-            <h3 className="text-headline-sm font-semibold text-primary">Platform Summary</h3>
+      {/* Admin: Customer Collection Summary */}
+      {isAdmin && !loading && adminCustomers.length > 0 && (
+        <div className="bg-surface-container-lowest rounded-xl shadow border border-outline-variant/30 p-md mb-md">
+          <div className="flex items-center gap-xs mb-md">
+            <span className="material-symbols-outlined text-primary text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>group</span>
+            <h3 className="text-headline-sm font-semibold text-primary">Customer Collection Status</h3>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y divide-outline-variant/20">
-            {[
-              { label: 'Total Users',     val: stats.total_users      ?? 0 },
-              { label: 'Total Purchases', val: stats.total_purchases  ?? 0 },
-              { label: 'Total Parts',     val: stats.total_parts      ?? 0 },
-              { label: 'Pending Bids',    val: stats.pending_bids     ?? 0 },
-              { label: 'Total Billed',    val: fmtJpy(stats.total_billed    ?? 0) },
-              { label: 'Total Received',  val: fmtJpy(stats.total_received  ?? 0) },
-              { label: 'Receivable',      val: fmtJpy(stats.receivable_amount ?? 0) },
-              { label: 'Total Revenue',   val: fmtJpy(stats.total_revenue   ?? 0) },
-            ].map(item => (
-              <div key={item.label} className="px-md py-sm">
-                <p className="text-label-sm text-on-surface-variant">{item.label}</p>
-                <p className="text-[20px] font-bold text-on-surface font-mono-data leading-tight mt-0.5">{item.val}</p>
-              </div>
-            ))}
-          </div>
+          <CustomerSummaryChart customers={adminCustomers} />
         </div>
       )}
+
+      {/* Admin: Outstanding Alert */}
+      {isAdmin && !loading && (() => {
+        const outstanding = adminCustomers.filter(c => c.balance < 0)
+        if (outstanding.length === 0) return null
+        const totalOwed = outstanding.reduce((s, c) => s + Math.abs(c.balance), 0)
+        return (
+          <div className="rounded-xl p-md mb-md border border-orange-200 bg-orange-50 flex items-start gap-3">
+            <span className="material-symbols-outlined text-orange-500 text-[20px] mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
+            <div>
+              <p className="text-body-sm font-semibold text-orange-800">
+                Outstanding Balance: ¥{totalOwed.toLocaleString()}
+              </p>
+              <p className="text-label-sm text-orange-700 mt-0.5">
+                {outstanding.length} customer{outstanding.length !== 1 ? 's' : ''} have unpaid balances —{' '}
+                {outstanding.map(c => c.name).join(', ')}
+              </p>
+            </div>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }

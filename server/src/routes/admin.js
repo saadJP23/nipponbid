@@ -75,9 +75,9 @@ router.get('/stats', adminAuth, async (req, res) => {
 
     const [recent_purchases] = await db.query(
       `SELECT sp.id, sp.user_id, sp.total, sp.commission, sp.created_at,
-              c.make, c.model, c.year, c.image_url, c.auction_date, c.chassis,
+              c.make, c.model, c.year, c.image_url, c.auction_date, c.chassis, c.auction_house,
               u.name as user_name, u.country as user_country
-       ${BASE} ORDER BY sp.created_at DESC LIMIT 6`,
+       ${BASE} ORDER BY sp.created_at DESC LIMIT 5`,
       shinP
     );
 
