@@ -1218,7 +1218,7 @@ async function buildAccountExcel(userName, purchases, remittances, parts = []) {
 
 router.get('/purchases/account-excel', auth, async (req, res) => {
   try {
-    const [[user]] = await db.query('SELECT name FROM users WHERE id=?', [req.user.id]);
+    const [[user]] = await db.query('SELECT name FROM users WHERE user_id=?', [req.user.id]);
     const [purchases] = await db.query(
       `SELECT p.*, c.make, c.model, c.year, c.auction_house, c.auction_date, c.chassis, c.lot_number
        FROM japan_purchases p JOIN japan_cars c ON c.pid = p.pid
@@ -1271,7 +1271,7 @@ router.get('/purchases/account-excel-admin', adminAuth, async (req, res) => {
   try {
     const { user_id } = req.query;
     if (!user_id) return res.status(400).json({ message: 'user_id required' });
-    const [[user]] = await db.query('SELECT name, email FROM users WHERE id=?', [user_id]);
+    const [[user]] = await db.query('SELECT name, email FROM users WHERE user_id=?', [user_id]);
     if (!user) return res.status(404).json({ message: 'User not found' });
     const [purchases] = await db.query(
       `SELECT p.*, c.make, c.model, c.year, c.auction_house, c.auction_date, c.chassis, c.lot_number
