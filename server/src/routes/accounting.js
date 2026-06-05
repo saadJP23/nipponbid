@@ -543,6 +543,133 @@ router.get('/export', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+router.get('/export-all', adminAuth, async (req, res) => {
+  try {
+    const [users] = await db.query(
+      "SELECT user_id, name FROM users WHERE role = 'user' ORDER BY name"
+    );
+
+    // Build one combined workbook — one Data+Details sheet pair per user
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'NipponBid';
+
+    // Summary sheet first
+    const sumSheet = wb.addWorksheet('Summary');
+    sumSheet.columns = [
+      { width: 24 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 16 },
+    ];
+
+    const C = { headerBg: 'FF0F172A', headerText: 'FFFFFFFF', subHeaderBg: 'FF1E3A5F', colHeaderBg: 'FF2E4A7A', labelBg: 'FFF1F5F9', border: 'FFD1D5DB', altRow: 'FFF8FAFC', redText: 'FF9F1239' };
+    const allBorder = (argb = C.border) => ({ top: { style:'thin', color:{argb} }, left: { style:'thin', color:{argb} }, bottom: { style:'thin', color:{argb} }, right: { style:'thin', color:{argb} } });
+    const boldFont = (sz = 10, argb = 'FF111827') => ({ name: 'Arial', size: sz, bold: true, color: { argb } });
+    const normFont = (sz = 10, argb = 'FF374151') => ({ name: 'Arial', size: sz, color: { argb } });
+    const YEN = '#,##0';
+    const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
+
+    sumSheet.mergeCells('A1:E1');
+    const st = sumSheet.getCell('A1');
+    st.value = 'AUTO BID 株式会社  ·  ALL CUSTOMERS ACCOUNT SUMMARY';
+    st.font  = { name:'Arial', size:14, bold:true, color:{ argb:C.headerText } };
+    st.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:C.headerBg } };
+    st.alignment = { horizontal:'center', vertical:'middle' };
+    sumSheet.getRow(1).height = 28;
+
+    sumSheet.mergeCells('A2:E2');
+    const sd = sumSheet.getCell('A2');
+    sd.value = `  Statement Date: ${today}  ·  ${users.length} customers`;
+    sd.font  = boldFont(10, C.headerText);
+    sd.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:C.subHeaderBg } };
+    sd.alignment = { vertical:'middle' };
+    sumSheet.getRow(2).height = 18;
+
+    const SUM_HEADERS = ['CUSTOMER', 'COUNTRY', 'TOTAL BILLED', 'TOTAL RECEIVED', 'BALANCE'];
+    const shRow = sumSheet.getRow(3);
+    shRow.height = 22;
+    SUM_HEADERS.forEach((h, i) => {
+      const c = shRow.getCell(i + 1);
+      c.value = h; c.font = boldFont(9, C.headerText);
+      c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:C.colHeaderBg } };
+      c.alignment = { horizontal:'center', vertical:'middle' };
+      c.border = allBorder('FF1E3A5F');
+    });
+
+    let grandBilled = 0, grandReceived = 0;
+    const summaryRows = [];
+
+    for (const u of users) {
+      const ledger = await buildLedger(u.user_id);
+      const totalCredit = ledger.reduce((s, e) => s + e.credit, 0);
+      const totalDebit  = ledger.reduce((s, e) => s + e.debit,  0);
+      const balance     = totalCredit - totalDebit;
+      grandBilled   += totalDebit;
+      grandReceived += totalCredit;
+      summaryRows.push({ ...u, totalDebit, totalCredit, balance });
+
+      // Build per-user workbook and copy sheets into combined wb
+      const userWb = await buildAccountExcel(u.user_id);
+      for (const wsName of userWb.worksheets.map(w => w.name)) {
+        const srcWs  = userWb.getWorksheet(wsName);
+        const label  = `${u.name.replace(/[^a-zA-Z0-9 ]/g,'').slice(0,20)} - ${wsName}`;
+        const destWs = wb.addWorksheet(label);
+        srcWs.eachRow({ includeEmpty: false }, (row, rowNum) => {
+          const destRow = destWs.getRow(rowNum);
+          destRow.height = row.height;
+          row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+            const destCell = destWs.getCell(rowNum, colNum);
+            destCell.value      = cell.value;
+            destCell.font       = cell.font ? { ...cell.font } : undefined;
+            destCell.fill       = cell.fill ? { ...cell.fill } : undefined;
+            destCell.alignment  = cell.alignment ? { ...cell.alignment } : undefined;
+            destCell.numFmt     = cell.numFmt;
+            destCell.border     = cell.border ? { ...cell.border } : undefined;
+          });
+        });
+        srcWs.columns.forEach((col, i) => {
+          if (col.width) destWs.getColumn(i + 1).width = col.width;
+        });
+        destWs.views = srcWs.views || [];
+      }
+    }
+
+    // Fill summary rows
+    summaryRows.forEach((r, i) => {
+      const row = sumSheet.getRow(4 + i);
+      row.height = 18;
+      const bg = i % 2 === 0 ? 'FFFFFFFF' : C.altRow;
+      const [[userDetail]] = [[]]; // placeholder
+      const vals = [r.name, r.country || '—', r.totalDebit, r.totalCredit, r.balance];
+      vals.forEach((v, j) => {
+        const c = row.getCell(j + 1);
+        c.value = v;
+        c.font  = j === 4 ? boldFont(10, v < 0 ? C.redText : 'FF166534') : normFont(10);
+        if (j >= 2) c.numFmt = YEN;
+        c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: bg } };
+        c.alignment = { vertical:'middle', horizontal: j >= 2 ? 'right' : 'left', indent: j < 2 ? 1 : 0 };
+        c.border = allBorder();
+      });
+    });
+
+    // Grand total row
+    const gtRow = sumSheet.getRow(4 + summaryRows.length);
+    gtRow.height = 22;
+    ['TOTAL', '', grandBilled, grandReceived, grandReceived - grandBilled].forEach((v, i) => {
+      const c = gtRow.getCell(i + 1);
+      c.value = v;
+      c.font  = boldFont(10, i === 4 ? ((grandReceived - grandBilled) < 0 ? C.redText : 'FF166534') : C.headerText);
+      if (i >= 2) c.numFmt = YEN;
+      c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:C.headerBg } };
+      c.alignment = { vertical:'middle', horizontal: i >= 2 ? 'right' : 'center' };
+      c.border = allBorder('FF1E3A5F');
+    });
+
+    const fname = `nipponbid-all-accounts-${Date.now()}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 router.get('/summary', adminAuth, async (req, res) => {
   try {
     const [users] = await db.query("SELECT user_id, name, email, country FROM users WHERE role = 'user' ORDER BY name");

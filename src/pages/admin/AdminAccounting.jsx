@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAccountingSummary, getUserLedger, getAdminUsers, adminDownloadAccountExcel } from '../../services/api'
+import { getAccountingSummary, getUserLedger, getAdminUsers, adminDownloadAccountExcel, adminDownloadAllAccountsExcel } from '../../services/api'
 import { Wallet, Download, ChevronRight } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
@@ -39,6 +39,8 @@ export default function AdminAccounting() {
       .finally(() => setLedgerLoading(false))
   }
 
+  const [exportingAll, setExportingAll] = useState(false)
+
   const handleExport = async (userId) => {
     try {
       const r = await adminDownloadAccountExcel(userId)
@@ -49,6 +51,18 @@ export default function AdminAccounting() {
     } catch { toast.error('Export failed') }
   }
 
+  const handleExportAll = async () => {
+    setExportingAll(true)
+    try {
+      const r = await adminDownloadAllAccountsExcel()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([r.data]))
+      a.download = `nipponbid-all-accounts-${Date.now()}.xlsx`
+      a.click()
+    } catch { toast.error('Export failed') }
+    finally { setExportingAll(false) }
+  }
+
   const ledgerBalance = ledger?.length ? ledger[ledger.length - 1].balance : null
 
   return (
@@ -56,6 +70,10 @@ export default function AdminAccounting() {
       <div className="space-y-4 animate-slide-up">
         <div className="page-header">
           <h1 className="page-title">Accounting</h1>
+          <button className="btn btn-secondary" onClick={handleExportAll} disabled={exportingAll}>
+            <Download size={15} />
+            {exportingAll ? 'Exporting…' : 'Export All'}
+          </button>
         </div>
 
         <div className="card">

@@ -242,3 +242,4 @@ export const uploadJapanDocument  = (id, formData)   => api.post(`/japan/purchas
 export const deleteJapanDocument  = (purchaseId, docId) => api.delete(`/japan/purchases/${purchaseId}/documents/${docId}`);
 export const downloadAccountExcel      = ()         => api.get('/japan/purchases/account-excel', { responseType: 'blob' });
 export const adminDownloadAccountExcel = (userId) => api.get('/accounting/export', { params: { user_id: userId }, responseType: 'blob' });
+export const adminDownloadAllAccountsExcel = () => api.get('/accounting/export-all', { responseType: 'blob' });
