@@ -119,14 +119,21 @@ router.get('/stats', adminAuth, async (req, res) => {
     // Customer summary
     const [customer_rows] = await db.query(
       `SELECT u.user_id, u.name, u.country, u.type,
-              COUNT(p.purchase_id) AS purchases,
-              COALESCE(SUM(pd.total), 0) AS total_billed
+              COUNT(DISTINCT p.purchase_id) AS purchases,
+              COALESCE(SUM(pd.total), 0) AS car_billed
        FROM purchases p
        JOIN users u ON u.user_id = p.user_id
        JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
        WHERE ${pWhere.join(' AND ')}
-       GROUP BY u.user_id ORDER BY total_billed DESC`, pParams
+       GROUP BY u.user_id ORDER BY car_billed DESC`, pParams
     );
+    // Parts purchases billed per user
+    const [partsBilled] = await db.query(
+      `SELECT user_id, COALESCE(SUM(COALESCE(bid_price,0) + COALESCE(delivery_charges,0) + COALESCE(commission,0)), 0) AS parts_billed
+       FROM parts_purchases WHERE bid_price > 0 GROUP BY user_id`
+    );
+    const partsMap = {};
+    partsBilled.forEach(r => { partsMap[r.user_id] = Number(r.parts_billed); });
     const [perUserRec] = await db.query(
       `SELECT r.user_id, COALESCE(SUM(r.deposit_amount), 0) AS received
        FROM remittances r ${remJoin} WHERE ${remWhere.join(' AND ')}
@@ -136,9 +143,9 @@ router.get('/stats', adminAuth, async (req, res) => {
     perUserRec.forEach(r => { receivedMap[r.user_id] = Number(r.received); });
     const customer_summary = customer_rows.map(row => ({
       ...row,
-      total_billed:   Number(row.total_billed),
+      total_billed:   Number(row.car_billed) + (partsMap[row.user_id] || 0),
       total_received: receivedMap[row.user_id] || 0,
-      balance:        (receivedMap[row.user_id] || 0) - Number(row.total_billed),
+      balance:        (receivedMap[row.user_id] || 0) - Number(row.car_billed) - (partsMap[row.user_id] || 0),
     }));
 
     const [users_list] = await db.query("SELECT user_id, name, country FROM users WHERE role = 'user' ORDER BY name");
