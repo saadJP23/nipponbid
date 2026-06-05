@@ -7,12 +7,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: 'https://nipponbid.onrender.com',
         changeOrigin: true,
+        secure: true,
       },
       '/uploads': {
-        target: 'http://localhost:5001',
+        target: 'https://nipponbid.onrender.com',
         changeOrigin: true,
+        secure: true,
       },
     },
   },

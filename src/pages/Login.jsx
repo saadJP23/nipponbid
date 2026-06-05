@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -10,15 +10,23 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
+  const emailRef = useRef(null)
+  const passwordRef = useRef(null)
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.email || !form.password) return toast.error('Please fill in all fields')
+    // Read directly from DOM refs to handle browser autofill
+    const email    = emailRef.current?.value    || form.email
+    const password = passwordRef.current?.value || form.password
+    if (!email || !password) {
+      toast.error('Please fill in all fields')
+      return
+    }
     setLoading(true)
     try {
-      await login(form.email, form.password)
+      await login(email, password)
       navigate('/dashboard')
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid credentials')
@@ -51,6 +59,7 @@ export default function Login() {
                 placeholder="you@example.com"
                 value={form.email}
                 onChange={set('email')}
+                ref={emailRef}
                 autoComplete="email"
                 autoFocus
               />
@@ -67,6 +76,7 @@ export default function Login() {
                   placeholder="••••••••"
                   value={form.password}
                   onChange={set('password')}
+                  ref={passwordRef}
                   autoComplete="current-password"
                 />
                 <button
