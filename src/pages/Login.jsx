@@ -1,110 +1,102 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Car, Eye, EyeOff, ArrowRight } from 'lucide-react';
-import { login as loginApi } from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import toast from 'react-hot-toast';
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import toast from 'react-hot-toast'
 
 export default function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { login }  = useAuth()
+  const navigate   = useNavigate()
+  const [form, setForm] = useState({ email: '', password: '' })
+  const [show, setShow] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.email || !form.password) return toast.error('Please fill all fields');
-    setLoading(true);
+    e.preventDefault()
+    if (!form.email || !form.password) return toast.error('Please fill in all fields')
+    setLoading(true)
     try {
-      const { data } = await loginApi(form);
-      login(data.token, data.user);
-      toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`);
-      navigate('/dashboard');
+      await login(form.email, form.password)
+      navigate('/dashboard')
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      toast.error(err.response?.data?.message || 'Invalid credentials')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <div data-theme="light" style={{ background: 'var(--ae-canvas)', minHeight: 'calc(100vh - 64px)' }}
-      className="flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
+      <div className="w-full max-w-[400px]">
 
+        {/* Logo */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2.5 mb-6">
-            <img src="/logo.svg" alt="NipponBid" className="h-10 w-10 object-contain" />
-            <span className="font-bold text-2xl" style={{ color: 'var(--ae-ink)' }}>
-              Nippon<span style={{ color: 'var(--ae-red)' }}>Bid</span>
-            </span>
-          </Link>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--ae-ink)' }}>Welcome back</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--ae-ink-muted)' }}>Sign in to your account</p>
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-red rounded-xl mb-4">
+            <span className="text-white font-bold text-xl">N</span>
+          </div>
+          <h1 className="text-2xl font-bold text-navy">Welcome back</h1>
+          <p className="text-sm text-grey-500 mt-1">Sign in to your NipponBid account</p>
         </div>
 
-        <div className="card p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Card */}
+        <div className="card p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="label">Email Address</label>
+              <label className="label">Email address</label>
               <input
                 type="email"
-                name="email"
-                value={form.email}
-                onChange={handleChange}
+                className="input"
                 placeholder="you@example.com"
-                className="input-field"
+                value={form.email}
+                onChange={set('email')}
                 autoComplete="email"
+                autoFocus
               />
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between mb-1">
                 <label className="label mb-0">Password</label>
               </div>
               <div className="relative">
                 <input
-                  type={showPass ? 'text' : 'password'}
-                  name="password"
-                  value={form.password}
-                  onChange={handleChange}
+                  type={show ? 'text' : 'password'}
+                  className="input pr-10"
                   placeholder="••••••••"
-                  className="input-field pr-10"
+                  value={form.password}
+                  onChange={set('password')}
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPass(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: 'var(--ae-ink-faint)' }}
+                  onClick={() => setShow(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-grey-400 hover:text-grey-600"
                 >
-                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {show ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className="btn-gold w-full justify-center py-3 text-base">
-              {loading ? (
-                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>Sign In <ArrowRight size={16} /></>
-              )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full justify-center py-2.5 mt-2"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : null}
+              {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-
-          <p className="text-center text-sm mt-6" style={{ color: 'var(--ae-ink-muted)' }}>
-            Don't have an account?{' '}
-            <Link to="/register" className="font-medium hover:opacity-80" style={{ color: 'var(--ae-red)' }}>Create one free</Link>
-          </p>
         </div>
 
-        <p className="text-center text-xs mt-6" style={{ color: 'var(--ae-ink-faint)' }}>
-          Demo admin: <span style={{ color: 'var(--ae-ink-muted)' }}>admin@nipponbid.com</span>
+        <p className="text-center text-sm text-grey-500 mt-5">
+          Don't have an account?{' '}
+          <Link to="/register" className="text-red font-semibold hover:underline">
+            Create one
+          </Link>
         </p>
       </div>
     </div>
-  );
+  )
 }
