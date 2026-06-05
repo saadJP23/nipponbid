@@ -41,8 +41,8 @@ router.get('/proforma', adminAuth, async (req, res) => {
     const offset = (page - 1) * limit;
     const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM proforma_invoices pi WHERE ${where}`, params);
     const [rows] = await db.query(
-      `SELECT pi.*, u.name as user_name, u.email as user_email
-       FROM proforma_invoices pi JOIN users u ON u.id = pi.user_id
+      `SELECT pi.*, u.name AS user_name, u.email AS user_email
+       FROM proforma_invoices pi JOIN users u ON u.user_id = pi.user_id
        WHERE ${where} ORDER BY pi.invoice_date DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
     );
@@ -54,15 +54,15 @@ router.get('/proforma', adminAuth, async (req, res) => {
 
 router.post('/proforma', adminAuth, async (req, res) => {
   try {
-    const { user_id, invoice_date, due_date, sold_to, consigned_to, amount, notes } = req.body;
+    const { user_id, purchase_id, invoice_date, due_date, sold_to, consigned_to, amount, notes } = req.body;
     if (!user_id || !invoice_date || !amount) return res.status(400).json({ message: 'user_id, invoice_date, amount required' });
     const invoice_no = await genProformaNo();
     const [result] = await db.query(
-      'INSERT INTO proforma_invoices (user_id, invoice_no, invoice_date, due_date, sold_to, consigned_to, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [user_id, invoice_no, invoice_date, due_date || null, sold_to || null, consigned_to || null, amount, notes || null]
+      'INSERT INTO proforma_invoices (user_id, purchase_id, invoice_no, invoice_date, due_date, sold_to, consigned_to, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, purchase_id || null, invoice_no, invoice_date, due_date || null, sold_to || null, consigned_to || null, amount, notes || null]
     );
-    await notify(user_id, 'New Proforma Invoice', `Proforma invoice ${invoice_no} of ${Number(amount).toLocaleString()} has been issued.`, 'general', result.insertId);
-    const [row] = await db.query('SELECT * FROM proforma_invoices WHERE id = ?', [result.insertId]);
+    await notify(user_id, 'New Proforma Invoice', `Proforma invoice ${invoice_no} of ¥${Number(amount).toLocaleString()} has been issued.`, 'invoice', result.insertId);
+    const [row] = await db.query('SELECT * FROM proforma_invoices WHERE proforma_id = ?', [result.insertId]);
     res.status(201).json(row[0]);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -73,10 +73,10 @@ router.put('/proforma/:id', adminAuth, async (req, res) => {
   try {
     const { invoice_date, due_date, sold_to, consigned_to, amount, paid_amount, status, notes } = req.body;
     await db.query(
-      'UPDATE proforma_invoices SET invoice_date=?, due_date=?, sold_to=?, consigned_to=?, amount=?, paid_amount=?, status=?, notes=? WHERE id=?',
+      'UPDATE proforma_invoices SET invoice_date=?, due_date=?, sold_to=?, consigned_to=?, amount=?, paid_amount=?, status=?, notes=? WHERE proforma_id=?',
       [invoice_date, due_date || null, sold_to || null, consigned_to || null, amount, paid_amount || 0, status, notes || null, req.params.id]
     );
-    const [row] = await db.query('SELECT * FROM proforma_invoices WHERE id = ?', [req.params.id]);
+    const [row] = await db.query('SELECT * FROM proforma_invoices WHERE proforma_id = ?', [req.params.id]);
     if (!row.length) return res.status(404).json({ message: 'Invoice not found' });
     res.json(row[0]);
   } catch (err) {
@@ -86,7 +86,7 @@ router.put('/proforma/:id', adminAuth, async (req, res) => {
 
 router.delete('/proforma/:id', adminAuth, async (req, res) => {
   try {
-    await db.query('DELETE FROM proforma_invoices WHERE id = ?', [req.params.id]);
+    await db.query('DELETE FROM proforma_invoices WHERE proforma_id = ?', [req.params.id]);
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -119,8 +119,8 @@ router.get('/final', adminAuth, async (req, res) => {
     const offset = (page - 1) * limit;
     const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM final_invoices fi WHERE ${where}`, params);
     const [rows] = await db.query(
-      `SELECT fi.*, u.name as user_name, u.email as user_email
-       FROM final_invoices fi JOIN users u ON u.id = fi.user_id
+      `SELECT fi.*, u.name AS user_name, u.email AS user_email
+       FROM final_invoices fi JOIN users u ON u.user_id = fi.user_id
        WHERE ${where} ORDER BY fi.invoice_date DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
     );
@@ -132,15 +132,15 @@ router.get('/final', adminAuth, async (req, res) => {
 
 router.post('/final', adminAuth, async (req, res) => {
   try {
-    const { user_id, file_code, invoice_date, due_date, ship_name, etd, eta, amount, notes } = req.body;
+    const { user_id, purchase_id, shipping_id, invoice_date, due_date, amount, notes } = req.body;
     if (!user_id || !invoice_date || !amount) return res.status(400).json({ message: 'user_id, invoice_date, amount required' });
     const invoice_no = await genFinalNo();
     const [result] = await db.query(
-      'INSERT INTO final_invoices (user_id, invoice_no, file_code, invoice_date, due_date, ship_name, etd, eta, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [user_id, invoice_no, file_code || null, invoice_date, due_date || null, ship_name || null, etd || null, eta || null, amount, notes || null]
+      'INSERT INTO final_invoices (user_id, purchase_id, shipping_id, invoice_no, invoice_date, due_date, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, purchase_id || null, shipping_id || null, invoice_no, invoice_date, due_date || null, amount, notes || null]
     );
-    await notify(user_id, 'New Final Invoice', `Final invoice ${invoice_no} of ${Number(amount).toLocaleString()} has been issued.`, 'general', result.insertId);
-    const [row] = await db.query('SELECT * FROM final_invoices WHERE id = ?', [result.insertId]);
+    await notify(user_id, 'New Final Invoice', `Final invoice ${invoice_no} of ¥${Number(amount).toLocaleString()} has been issued.`, 'invoice', result.insertId);
+    const [row] = await db.query('SELECT * FROM final_invoices WHERE final_invoice_id = ?', [result.insertId]);
     res.status(201).json(row[0]);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -149,12 +149,12 @@ router.post('/final', adminAuth, async (req, res) => {
 
 router.put('/final/:id', adminAuth, async (req, res) => {
   try {
-    const { file_code, invoice_date, due_date, ship_name, etd, eta, amount, paid_amount, status, notes } = req.body;
+    const { invoice_date, due_date, amount, paid_amount, status, notes } = req.body;
     await db.query(
-      'UPDATE final_invoices SET file_code=?, invoice_date=?, due_date=?, ship_name=?, etd=?, eta=?, amount=?, paid_amount=?, status=?, notes=? WHERE id=?',
-      [file_code || null, invoice_date, due_date || null, ship_name || null, etd || null, eta || null, amount, paid_amount || 0, status, notes || null, req.params.id]
+      'UPDATE final_invoices SET invoice_date=?, due_date=?, amount=?, paid_amount=?, status=?, notes=? WHERE final_invoice_id=?',
+      [invoice_date, due_date || null, amount, paid_amount || 0, status, notes || null, req.params.id]
     );
-    const [row] = await db.query('SELECT * FROM final_invoices WHERE id = ?', [req.params.id]);
+    const [row] = await db.query('SELECT * FROM final_invoices WHERE final_invoice_id = ?', [req.params.id]);
     if (!row.length) return res.status(404).json({ message: 'Invoice not found' });
     res.json(row[0]);
   } catch (err) {
@@ -164,7 +164,7 @@ router.put('/final/:id', adminAuth, async (req, res) => {
 
 router.delete('/final/:id', adminAuth, async (req, res) => {
   try {
-    await db.query('DELETE FROM final_invoices WHERE id = ?', [req.params.id]);
+    await db.query('DELETE FROM final_invoices WHERE final_invoice_id = ?', [req.params.id]);
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
