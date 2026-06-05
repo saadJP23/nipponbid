@@ -18,8 +18,10 @@ router.get('/stats', adminAuth, async (req, res) => {
     const remWhere = ["r.status = 'confirmed'"];
     const remParams = [];
     const remJoin = country ? 'JOIN users u ON u.user_id = r.user_id' : '';
-    if (user_id) { remWhere.push('r.user_id = ?'); remParams.push(+user_id); }
-    if (country) { remWhere.push('u.country = ?'); remParams.push(country); }
+    if (user_id)   { remWhere.push('r.user_id = ?');                                      remParams.push(+user_id); }
+    if (country)   { remWhere.push('u.country = ?');                                      remParams.push(country); }
+    if (date_from) { remWhere.push('COALESCE(r.tt_date, DATE(r.confirmed_at)) >= ?');     remParams.push(date_from); }
+    if (date_to)   { remWhere.push('COALESCE(r.tt_date, DATE(r.confirmed_at)) <= ?');     remParams.push(date_to); }
 
     const invWhere = user_id ? 'AND user_id = ?' : '';
     const invParams = user_id ? [+user_id] : [];
