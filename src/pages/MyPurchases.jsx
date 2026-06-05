@@ -216,7 +216,11 @@ export default function MyPurchases() {
                   )}
                   <div className="flex justify-between pt-3 mt-1 border-t-2 border-navy">
                     <span className="font-bold text-navy">Total</span>
-                    <span className="font-bold font-mono text-navy text-base">¥ {fmt(detail.details.total)}</span>
+                    <span className="font-bold font-mono text-navy text-base">¥ {fmt(
+                      isDealer
+                        ? Number(detail.details.bid_price || 0) + Number(detail.details.others || 0) + Number(detail.details.commission || 0)
+                        : detail.details.total
+                    )}</span>
                   </div>
                 </div>
               </div>
