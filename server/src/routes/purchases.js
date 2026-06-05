@@ -13,16 +13,16 @@ router.get('/my', auth, async (req, res) => {
     const offset = (page - 1) * limit;
     const [[{ total }]] = await db.query('SELECT COUNT(*) as total FROM purchases WHERE user_id = ?', [req.user.id]);
     const [rows] = await db.query(
-      `SELECT p.*, c.make, c.model, c.year, c.chassis_number, c.lot_number,
-              a.name as auction_name, a.auction_date,
-              ci.image_path as car_image,
-              (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.id) as doc_count
+      `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade,
+              a.auction_name, a.auction_date,
+              ci.url AS car_image,
+              (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id) AS doc_count
        FROM purchases p
-       JOIN cars c ON c.id = p.car_id
-       LEFT JOIN auctions a ON a.id = c.auction_id
-       LEFT JOIN car_images ci ON ci.car_id = c.id AND ci.is_primary = 1
+       JOIN cars c ON c.car_id = p.car_id
+       LEFT JOIN auctions a ON a.auction_id = p.auction_id
+       LEFT JOIN car_images ci ON ci.car_id = c.car_id AND ci.is_primary = 1
        WHERE p.user_id = ?
-       ORDER BY p.purchased_at DESC
+       ORDER BY p.created_at DESC
        LIMIT ? OFFSET ?`,
       [req.user.id, parseInt(limit), offset]
     );
@@ -35,24 +35,23 @@ router.get('/my', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT p.*, c.make, c.model, c.year, c.chassis_number, c.lot_number, c.color, c.mileage, c.grade, c.engine, c.transmission,
-              a.name as auction_name, a.auction_date, a.location as auction_location,
-              u.name as user_name, u.email as user_email, u.country as user_country, u.phone as user_phone,
-              b.amount as bid_amount
+      `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade, c.engine, c.transmission,
+              a.auction_name, a.auction_date, a.location AS auction_location,
+              u.name AS user_name, u.email AS user_email, u.country AS user_country, u.contact_number AS user_phone
        FROM purchases p
-       JOIN cars c ON c.id = p.car_id
-       LEFT JOIN auctions a ON a.id = c.auction_id
-       JOIN users u ON u.id = p.user_id
-       LEFT JOIN bids b ON b.id = p.bid_id
-       WHERE p.id = ? ${req.user.role !== 'admin' ? 'AND p.user_id = ?' : ''}`,
+       JOIN cars c ON c.car_id = p.car_id
+       LEFT JOIN auctions a ON a.auction_id = p.auction_id
+       JOIN users u ON u.user_id = p.user_id
+       WHERE p.purchase_id = ? ${req.user.role !== 'admin' ? 'AND p.user_id = ?' : ''}`,
       req.user.role !== 'admin' ? [req.params.id, req.user.id] : [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ message: 'Purchase not found' });
 
-    const [images] = await db.query('SELECT * FROM car_images WHERE car_id = ? ORDER BY is_primary DESC', [rows[0].car_id]);
-    const [documents] = await db.query('SELECT * FROM documents WHERE purchase_id = ? ORDER BY uploaded_at DESC', [req.params.id]);
+    const [images]    = await db.query('SELECT * FROM car_images WHERE car_id = ? ORDER BY is_primary DESC', [rows[0].car_id]);
+    const [documents] = await db.query('SELECT * FROM documents WHERE purchase_id = ? ORDER BY created_at DESC', [req.params.id]);
+    const [details]   = await db.query('SELECT * FROM purchase_details WHERE purchase_id = ?', [req.params.id]);
 
-    res.json({ ...rows[0], images, documents });
+    res.json({ ...rows[0], images, documents, details: details[0] || null });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -60,22 +59,27 @@ router.get('/:id', auth, async (req, res) => {
 
 router.get('/', adminAuth, async (req, res) => {
   try {
-    const { shipping_status, page = 1, limit = 15 } = req.query;
+    const { user_id, page = 1, limit = 15 } = req.query;
     let where = '1=1';
     const params = [];
-    if (shipping_status) { where += ' AND p.shipping_status = ?'; params.push(shipping_status); }
+    if (user_id) { where += ' AND p.user_id = ?'; params.push(user_id); }
     const offset = (page - 1) * limit;
     const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM purchases p WHERE ${where}`, params);
     const [rows] = await db.query(
-      `SELECT p.*, c.make, c.model, c.year, u.name as user_name, u.email as user_email, u.country as user_country,
-              ci.image_path as car_image,
-              (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.id) as doc_count
+      `SELECT p.*, c.make, c.model, c.year, c.chassis_no,
+              a.auction_name, a.auction_date,
+              u.name AS user_name, u.email AS user_email, u.country AS user_country,
+              ci.url AS car_image,
+              pd.total AS purchase_total,
+              (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id) AS doc_count
        FROM purchases p
-       JOIN cars c ON c.id = p.car_id
-       JOIN users u ON u.id = p.user_id
-       LEFT JOIN car_images ci ON ci.car_id = c.id AND ci.is_primary = 1
+       JOIN cars c ON c.car_id = p.car_id
+       JOIN users u ON u.user_id = p.user_id
+       LEFT JOIN auctions a ON a.auction_id = p.auction_id
+       LEFT JOIN car_images ci ON ci.car_id = c.car_id AND ci.is_primary = 1
+       LEFT JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
        WHERE ${where}
-       ORDER BY p.purchased_at DESC
+       ORDER BY p.created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
     );
@@ -87,19 +91,33 @@ router.get('/', adminAuth, async (req, res) => {
 
 router.post('/', adminAuth, async (req, res) => {
   try {
-    const { user_id, car_id, bid_id, final_amount, shipping_fee, insurance_fee, inspection_fee, destination_country, destination_port, notes } = req.body;
+    const { user_id, car_id, auction_id, auction_date, lot_no, destination, pro_invoice_no, file_code_no, remarks,
+            bid_price, auction_commission, transportation, loading_custom, commission,
+            tax_10_percent, radiation_photos, custom_fee, freight, recycle, others } = req.body;
+
     const [result] = await db.query(
-      `INSERT INTO purchases (user_id, car_id, bid_id, final_amount, shipping_fee, insurance_fee, inspection_fee, destination_country, destination_port, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user_id, car_id, bid_id || null, final_amount, shipping_fee || 0, insurance_fee || 0, inspection_fee || 0, destination_country, destination_port, notes]
+      `INSERT INTO purchases (user_id, car_id, auction_id, auction_date, lot_no, destination, pro_invoice_no, file_code_no, remarks)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user_id, car_id, auction_id || null, auction_date || null, lot_no || null,
+       destination || null, pro_invoice_no || null, file_code_no || null, remarks || null]
     );
-    await db.query('UPDATE cars SET status = ? WHERE id = ?', ['sold', car_id]);
-    if (bid_id) await db.query('UPDATE bids SET status = ? WHERE id = ?', ['won', bid_id]);
 
-    const [car] = await db.query('SELECT make, model, year FROM cars WHERE id = ?', [car_id]);
-    await notify(user_id, 'Purchase Confirmed!', `Your purchase of ${car[0].make} ${car[0].model} ${car[0].year} has been confirmed. Total: ¥${Number(final_amount).toLocaleString()}`, 'purchase', result.insertId);
+    // Insert purchase_details if cost breakdown provided
+    if (bid_price) {
+      await db.query(
+        `INSERT INTO purchase_details (purchase_id, bid_price, auction_commission, transportation, loading_custom, commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [result.insertId, bid_price, auction_commission||0, transportation||0, loading_custom||0,
+         commission||0, tax_10_percent||0, radiation_photos||0, custom_fee||0, freight||0, recycle||0, others||0]
+      );
+    }
 
-    const [purchase] = await db.query('SELECT * FROM purchases WHERE id = ?', [result.insertId]);
+    await db.query('UPDATE cars SET status = ? WHERE car_id = ?', ['purchased', car_id]);
+
+    const [car] = await db.query('SELECT make, model, year FROM cars WHERE car_id = ?', [car_id]);
+    await notify(user_id, 'Purchase Confirmed!', `Your purchase of ${car[0].make} ${car[0].model} ${car[0].year} has been confirmed.`, 'purchase', result.insertId);
+
+    const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [result.insertId]);
     res.status(201).json(purchase[0]);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -108,19 +126,14 @@ router.post('/', adminAuth, async (req, res) => {
 
 router.put('/:id/shipping', adminAuth, async (req, res) => {
   try {
-    const { shipping_status, tracking_number, vessel_name, eta, notes } = req.body;
-    const [purchase] = await db.query('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
+    const { remarks } = req.body;
+    const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
     if (!purchase.length) return res.status(404).json({ message: 'Purchase not found' });
 
-    await db.query(
-      'UPDATE purchases SET shipping_status=?, tracking_number=?, vessel_name=?, eta=?, notes=? WHERE id=?',
-      [shipping_status, tracking_number, vessel_name, eta, notes, req.params.id]
-    );
+    await db.query('UPDATE purchases SET remarks = ? WHERE purchase_id = ?', [remarks, req.params.id]);
+    await notify(purchase[0].user_id, 'Purchase Updated', `Your purchase remarks have been updated.`, 'purchase', req.params.id);
 
-    const statusLabels = { processing: 'Processing', in_transit: 'In Transit', at_port: 'At Port', customs: 'In Customs', delivered: 'Delivered' };
-    await notify(purchase[0].user_id, `Shipping Update: ${statusLabels[shipping_status] || shipping_status}`, `Your vehicle shipping status has been updated to "${statusLabels[shipping_status]}". ${tracking_number ? `Tracking: ${tracking_number}` : ''}`, 'purchase', req.params.id);
-
-    const [updated] = await db.query('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
+    const [updated] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
     res.json(updated[0]);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -131,18 +144,19 @@ router.post('/:id/documents', adminAuth, uploadDocument.single('document'), asyn
   try {
     const { type, name } = req.body;
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const [purchase] = await db.query('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
+    const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
     if (!purchase.length) return res.status(404).json({ message: 'Purchase not found' });
 
+    const fileUrl = await resolveUploadedFile(req.file, 'nipponbid/documents');
     const [result] = await db.query(
-      'INSERT INTO documents (purchase_id, type, name, file_path, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.params.id, type, name || req.file.originalname, await resolveUploadedFile(req.file, 'nipponbid/documents'), req.file.size, req.user.id]
+      'INSERT INTO documents (purchase_id, user_id, car_id, name, type, url, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.params.id, purchase[0].user_id, purchase[0].car_id,
+       name || req.file.originalname, type || 'user_and_admin', fileUrl, req.user.id]
     );
 
-    const typeLabels = { auction_sheet: 'Auction Sheet', export_certificate: 'Export Certificate', bill_of_lading: 'Bill of Lading', inspection_report: 'Inspection Report', deregistration: 'Deregistration', customs_clearance: 'Customs Clearance', other: 'Document' };
-    await notify(purchase[0].user_id, 'New Document Available', `A new document (${typeLabels[type] || type}) has been uploaded to your purchase.`, 'document', req.params.id);
+    await notify(purchase[0].user_id, 'New Document Available', `A new document has been uploaded to your purchase.`, 'document', req.params.id);
 
-    const [doc] = await db.query('SELECT * FROM documents WHERE id = ?', [result.insertId]);
+    const [doc] = await db.query('SELECT * FROM documents WHERE document_id = ?', [result.insertId]);
     res.status(201).json(doc[0]);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -151,7 +165,7 @@ router.post('/:id/documents', adminAuth, uploadDocument.single('document'), asyn
 
 router.delete('/:purchaseId/documents/:docId', adminAuth, async (req, res) => {
   try {
-    await db.query('DELETE FROM documents WHERE id = ? AND purchase_id = ?', [req.params.docId, req.params.purchaseId]);
+    await db.query('DELETE FROM documents WHERE document_id = ? AND purchase_id = ?', [req.params.docId, req.params.purchaseId]);
     res.json({ message: 'Document deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
