@@ -27,7 +27,7 @@ router.get('/auctions/:id', async (req, res) => {
        FROM cars c
        LEFT JOIN car_images ci ON ci.car_id = c.car_id AND ci.is_primary = 1
        WHERE c.auction_id = ?
-       ORDER BY c.lot_number ASC`,
+       ORDER BY c.car_id ASC`,
       [req.params.id]
     );
     res.json({ ...auction[0], cars });
@@ -71,7 +71,7 @@ router.get('/', async (req, res) => {
        LEFT JOIN auctions a ON a.auction_id = c.auction_id
        LEFT JOIN car_images ci ON ci.car_id = c.car_id AND ci.is_primary = 1
        WHERE ${where.join(' AND ')}
-       ORDER BY a.auction_date ASC, c.lot_number ASC
+       ORDER BY a.auction_date ASC, c.car_id ASC
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
     );
@@ -131,11 +131,11 @@ router.put('/auctions/:id', adminAuth, async (req, res) => {
 
 router.post('/', adminAuth, async (req, res) => {
   try {
-    const { auction_id, lot_number, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price } = req.body;
+    const { auction_id, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price } = req.body;
     const [result] = await db.query(
-      `INSERT INTO cars (auction_id, lot_number, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [auction_id, lot_number, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price]
+      `INSERT INTO cars (auction_id, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [auction_id, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price]
     );
     const [rows] = await db.query('SELECT * FROM cars WHERE car_id = ?', [result.insertId]);
     res.status(201).json(rows[0]);
@@ -146,10 +146,10 @@ router.post('/', adminAuth, async (req, res) => {
 
 router.put('/:id', adminAuth, async (req, res) => {
   try {
-    const { auction_id, lot_number, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price, status } = req.body;
+    const { auction_id, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price, status } = req.body;
     await db.query(
-      `UPDATE cars SET auction_id=?, lot_number=?, make=?, model=?, year=?, mileage=?, grade=?, chassis_no=?, engine=?, transmission=?, color=?, doors=?, seats=?, fuel_type=?, starting_price=?, status=? WHERE car_id=?`,
-      [auction_id, lot_number, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price, status, req.params.id]
+      `UPDATE cars SET auction_id=?, make=?, model=?, year=?, mileage=?, grade=?, chassis_no=?, engine=?, transmission=?, color=?, doors=?, seats=?, fuel_type=?, starting_price=?, status=? WHERE car_id=?`,
+      [auction_id, make, model, year, mileage, grade, chassis_no, engine, transmission, color, doors, seats, fuel_type, starting_price, status, req.params.id]
     );
     const [rows] = await db.query('SELECT * FROM cars WHERE car_id = ?', [req.params.id]);
     res.json(rows[0]);
