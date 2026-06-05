@@ -77,21 +77,4 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const db = require('./config/database');
 
-// Auto-migration: rename commission → others_commission in purchase_details
-(async () => {
-  try {
-    const [cols] = await db.query(
-      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='purchase_details' AND COLUMN_NAME='commission'"
-    );
-    if (cols.length) {
-      await db.query(
-        'ALTER TABLE purchase_details CHANGE commission others_commission DECIMAL(14,2) DEFAULT 0'
-      );
-      console.log('✅ Migration: purchase_details.commission → others_commission');
-    }
-  } catch (e) {
-    console.error('Migration error:', e.message);
-  }
-})();
-
 app.listen(PORT, () => console.log(`🚀 NipponBid server running on port ${PORT}`));
