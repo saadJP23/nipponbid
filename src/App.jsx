@@ -8,6 +8,7 @@ import Login     from './pages/Login'
 import Register  from './pages/Register'
 
 import Dashboard     from './pages/Dashboard'
+import Auctions      from './pages/Auctions'
 import MyPurchases   from './pages/MyPurchases'
 import MyBids        from './pages/MyBids'
 import Shipments     from './pages/Shipments'
@@ -58,6 +59,7 @@ export default function App() {
 
         <Route element={<Protected><Layout /></Protected>}>
           <Route path="/dashboard"     element={<Dashboard />} />
+          <Route path="/auctions"      element={<Auctions />} />
           <Route path="/my-purchases"  element={<MyPurchases />} />
           <Route path="/my-bids"       element={<MyBids />} />
           <Route path="/shipments"     element={<Shipments />} />

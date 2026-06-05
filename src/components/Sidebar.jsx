@@ -3,12 +3,13 @@ import { useAuth } from '../context/AuthContext'
 import {
   LayoutDashboard, ShoppingBag, Gavel, Ship, Receipt, Wallet,
   Package, Bell, User, LogOut, ChevronRight, Settings,
-  Users, BarChart2, FileText, Banknote, Truck, Wrench,
+  Users, BarChart2, FileText, Banknote, Truck, Wrench, Car,
 } from 'lucide-react'
 
 const NAV_USER = [
   { group: 'Overview',    items: [
     { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/auctions',     icon: Car,             label: 'Auctions' },
   ]},
   { group: 'My Activity', items: [
     { to: '/my-purchases', icon: ShoppingBag,      label: 'My Purchases' },
@@ -32,6 +33,7 @@ const NAV_ADMIN = [
     { to: '/dashboard',          icon: LayoutDashboard, label: 'Dashboard' },
   ]},
   { group: 'Management',  items: [
+    { to: '/auctions',           icon: Car,             label: 'Auctions' },
     { to: '/admin/users',        icon: Users,           label: 'Users' },
     { to: '/admin/purchases',    icon: ShoppingBag,     label: 'Purchases' },
     { to: '/admin/bids',         icon: Gavel,           label: 'Bids' },

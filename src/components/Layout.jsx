@@ -7,6 +7,7 @@ import api from '../services/api'
 
 const PAGE_TITLES = {
   '/dashboard':         'Dashboard',
+  '/auctions':          'Auctions',
   '/my-purchases':      'My Purchases',
   '/my-bids':           'My Bids',
   '/shipments':         'Shipments',
