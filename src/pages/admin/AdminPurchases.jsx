@@ -229,7 +229,8 @@ export default function AdminPurchases() {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
-  const total_cost = COST_FIELDS.reduce((sum, f) => sum + n(form[f.key]), 0)
+  const TOTAL_KEYS = ['bid_price','auction_charges','transportation','loading_custom','others_commission','radiation_photos','custom_fee']
+  const total_cost = TOTAL_KEYS.reduce((sum, k) => sum + n(form[k]), 0)
 
   const handleSave = async () => {
     setSaving(true)
