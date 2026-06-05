@@ -196,7 +196,10 @@ export default function MyPurchases() {
                 <div className="card p-3">
                   <CostRow label="Bid Price" value={detail.details.bid_price} />
                   {isDealer ? (
-                    <CostRow label="Others" value={detail.details.others} />
+                    <>
+                      <CostRow label="Others" value={detail.details.others} />
+                      <CostRow label="Commission" value={detail.details.commission} />
+                    </>
                   ) : (
                     <>
                       <CostRow label="Auction Commission" value={detail.details.auction_commission} />

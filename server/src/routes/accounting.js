@@ -59,6 +59,9 @@ const buildLedger = async (userId) => {
   const purchaseRowsMapped = purchaseRows.map(r => ({
     ...r,
     debit: calcTotal(r, userType, dealerFee),
+    bid_price:  Number(r.bid_price)  || 0,
+    others:     Number(r.others)     || 0,
+    commission: Number(r.commission) || 0,
   }));
 
   // Debits — parts purchases

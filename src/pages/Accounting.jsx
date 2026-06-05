@@ -86,6 +86,9 @@ export default function Accounting() {
                 <th>Type</th>
                 <th>Ref</th>
                 <th>Description</th>
+                <th className="text-right">Bid Price</th>
+                <th className="text-right">Others</th>
+                <th className="text-right">Commission</th>
                 <th className="text-right">Debit</th>
                 <th className="text-right">Credit</th>
                 <th className="text-right">Balance</th>
@@ -97,6 +100,15 @@ export default function Accounting() {
                     <td><span className={`badge ${TYPE_BADGE[e.entry_type] || 'badge-grey'}`}>{e.entry_type}</span></td>
                     <td className="font-mono text-xs">{e.ref}</td>
                     <td className="max-w-[200px] truncate">{e.description}</td>
+                    <td className="text-right font-mono text-xs">
+                      {e.entry_type === 'purchase' ? `¥ ${fmt(e.bid_price)}` : '—'}
+                    </td>
+                    <td className="text-right font-mono text-xs">
+                      {e.entry_type === 'purchase' ? `¥ ${fmt(e.others)}` : '—'}
+                    </td>
+                    <td className="text-right font-mono text-xs">
+                      {e.entry_type === 'purchase' ? `¥ ${fmt(e.commission)}` : '—'}
+                    </td>
                     <td className="text-right font-mono">
                       {e.debit > 0 ? <span className="text-red">¥ {fmt(e.debit)}</span> : '—'}
                     </td>
