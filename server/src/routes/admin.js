@@ -36,11 +36,22 @@ router.get('/stats', adminAuth, async (req, res) => {
     const [[{ total_purchases }]] = await db.query(
       `SELECT COUNT(*) AS total_purchases FROM purchases p JOIN users u ON u.user_id = p.user_id WHERE ${pWhere.join(' AND ')}`, pParams
     );
-    const [[{ total_billed }]] = await db.query(
-      `SELECT COALESCE(SUM(pd.total), 0) AS total_billed
+    const [[{ car_billed_total }]] = await db.query(
+      `SELECT COALESCE(SUM(pd.total), 0) AS car_billed_total
        FROM purchase_details pd JOIN purchases p ON p.purchase_id = pd.purchase_id
        JOIN users u ON u.user_id = p.user_id WHERE ${pWhere.join(' AND ')}`, pParams
     );
+    // Include parts_purchases in total billed (same as buildLedger)
+    const ppWhere = ['pp.bid_price > 0'];
+    const ppParams = [];
+    if (user_id) { ppWhere.push('pp.user_id = ?'); ppParams.push(+user_id); }
+    if (country) { ppWhere.push('u.country = ?');  ppParams.push(country); }
+    const ppJoin = country ? 'JOIN users u ON u.user_id = pp.user_id' : '';
+    const [[{ parts_billed_total }]] = await db.query(
+      `SELECT COALESCE(SUM(COALESCE(bid_price,0) + COALESCE(delivery_charges,0) + COALESCE(commission,0)), 0) AS parts_billed_total
+       FROM parts_purchases pp ${ppJoin} WHERE ${ppWhere.join(' AND ')}`, ppParams
+    );
+    const total_billed = Number(car_billed_total) + Number(parts_billed_total);
     const [[{ total_received }]] = await db.query(
       `SELECT COALESCE(SUM(r.deposit_amount), 0) AS total_received FROM remittances r ${remJoin} WHERE ${remWhere.join(' AND ')}`, remParams
     );
