@@ -7,6 +7,37 @@ const notify = async (userId, title, message, type, relatedId = null) => {
   await db.query('INSERT INTO notifications (user_id, title, message, type, related_id) VALUES (?, ?, ?, ?, ?)', [userId, title, message, type, relatedId]);
 };
 
+// Returns next car_id and next pro_invoice_no for a given user
+router.get('/next-meta', adminAuth, async (req, res) => {
+  try {
+    const { user_id } = req.query;
+
+    // Next car_id = MAX(car_id) + 1
+    const [[{ max_car_id }]] = await db.query('SELECT COALESCE(MAX(car_id), 0) AS max_car_id FROM cars');
+    const next_car_id = Number(max_car_id) + 1;
+
+    // Next pro_invoice_no for this user — find last, increment number
+    let next_pro_invoice_no = '';
+    if (user_id) {
+      const [[last]] = await db.query(
+        `SELECT pro_invoice_no FROM purchases WHERE user_id = ? AND pro_invoice_no IS NOT NULL
+         ORDER BY purchase_id DESC LIMIT 1`, [user_id]
+      );
+      if (last?.pro_invoice_no) {
+        // Pattern: PREFIX-NUMBER  e.g. HS-12, ERD-1, P-001
+        const match = last.pro_invoice_no.match(/^(.*?)(\d+)$/);
+        if (match) {
+          next_pro_invoice_no = `${match[1]}${Number(match[2]) + 1}`;
+        } else {
+          next_pro_invoice_no = last.pro_invoice_no + '-2';
+        }
+      }
+    }
+
+    res.json({ next_car_id, next_pro_invoice_no });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 router.get('/my', auth, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;

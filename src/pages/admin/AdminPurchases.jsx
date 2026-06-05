@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllPurchases, getPurchase, updatePurchase, createPurchase, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers } from '../../services/api'
-import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown, Plus } from 'lucide-react'
+import { getAllPurchases, getPurchase, updatePurchase, createPurchase, createCar, createAuction, getAuctions, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers, getPurchaseNextMeta } from '../../services/api'
+import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown, Plus, RefreshCw } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 
@@ -62,13 +62,22 @@ export default function AdminPurchases() {
   const [docType, setDocType] = useState('user_and_admin')
   const [showCreate, setShowCreate] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [createForm, setCreateForm] = useState({
+  const [auctions, setAuctions] = useState([])
+  const [showNewAuction, setShowNewAuction] = useState(false)
+  const [newAuction, setNewAuction] = useState({ auction_name: '', location: '', auction_house: '', auction_date: '' })
+  const [creatingAuction, setCreatingAuction] = useState(false)
+  const BLANK_CREATE = {
     user_id: '', car_id: '', auction_id: '', auction_date: '', lot_no: '',
     destination: '', pro_invoice_no: '', file_code_no: '', remarks: '',
+    // car fields
+    make: '', model: '', year: '', chassis_no: '', color: '', mileage: '', grade: '',
+    engine: '', transmission: 'automatic', fuel_type: 'petrol', doors: '', seats: '', starting_price: '',
+    // cost
     bid_price: '', auction_commission: '', transportation: '', loading_custom: '',
     commission: '', tax_10_percent: '0', radiation_photos: '0', custom_fee: '0',
     freight: '', recycle: '0', others: '0',
-  })
+  }
+  const [createForm, setCreateForm] = useState(BLANK_CREATE)
 
   useEffect(() => {
     getAdminUsers({ limit: 200 }).then(r => setUsers(r.data.users || [])).catch(() => {})
@@ -87,32 +96,111 @@ export default function AdminPurchases() {
   const handleUserFilter = (uid) => { setUserFilter(uid); setPage(1) }
 
   const setC = (k) => (e) => setCreateForm(f => ({ ...f, [k]: e.target.value }))
+  const setNA = (k) => (e) => setNewAuction(f => ({ ...f, [k]: e.target.value }))
+
+  // Load auctions and auto-fill meta when user changes
+  useEffect(() => {
+    getAuctions().then(r => setAuctions(r.data || [])).catch(() => {})
+  }, [])
+
+  const handleUserChange = async (uid) => {
+    setCreateForm(f => ({ ...f, user_id: uid, pro_invoice_no: '' }))
+    if (!uid) return
+    try {
+      const r = await getPurchaseNextMeta(uid)
+      setCreateForm(f => ({
+        ...f,
+        user_id:        uid,
+        car_id:         String(r.data.next_car_id),
+        pro_invoice_no: r.data.next_pro_invoice_no || '',
+      }))
+    } catch {}
+  }
+
+  const handleAuctionChange = (auctionId) => {
+    const auction = auctions.find(a => String(a.auction_id) === String(auctionId))
+    setCreateForm(f => ({
+      ...f,
+      auction_id:   auctionId,
+      auction_date: auction?.auction_date ? auction.auction_date.slice(0, 10) : f.auction_date,
+    }))
+  }
+
+  const handleCreateAuction = async (e) => {
+    e.preventDefault()
+    setCreatingAuction(true)
+    try {
+      const r = await createAuction(newAuction)
+      const created = r.data
+      setAuctions(prev => [...prev, created])
+      setCreateForm(f => ({
+        ...f,
+        auction_id:   String(created.auction_id),
+        auction_date: created.auction_date ? created.auction_date.slice(0, 10) : f.auction_date,
+      }))
+      setShowNewAuction(false)
+      setNewAuction({ auction_name: '', location: '', auction_house: '', auction_date: '' })
+      toast.success(`Auction "${created.auction_name}" created`)
+    } catch { toast.error('Failed to create auction') }
+    finally { setCreatingAuction(false) }
+  }
 
   const handleCreate = async (e) => {
     e.preventDefault()
+    if (!createForm.user_id || !createForm.make || !createForm.model) {
+      return toast.error('User, Make and Model are required')
+    }
     setSubmitting(true)
     try {
-      await createPurchase({
-        ...createForm,
-        user_id:        Number(createForm.user_id),
-        car_id:         Number(createForm.car_id),
-        auction_id:     createForm.auction_id ? Number(createForm.auction_id) : null,
-        bid_price:      Number(createForm.bid_price) || 0,
-        auction_commission: Number(createForm.auction_commission) || 0,
-        transportation: Number(createForm.transportation) || 0,
-        loading_custom: Number(createForm.loading_custom) || 0,
-        commission:     Number(createForm.commission) || 0,
-        tax_10_percent: Number(createForm.tax_10_percent) || 0,
-        radiation_photos: Number(createForm.radiation_photos) || 0,
-        custom_fee:     Number(createForm.custom_fee) || 0,
-        freight:        Number(createForm.freight) || 0,
-        recycle:        Number(createForm.recycle) || 0,
-        others:         Number(createForm.others) || 0,
+      // Step 1: create the car
+      const carRes = await createCar({
+        auction_id:    createForm.auction_id ? Number(createForm.auction_id) : null,
+        make:          createForm.make,
+        model:         createForm.model,
+        year:          Number(createForm.year) || null,
+        chassis_no:    createForm.chassis_no || null,
+        color:         createForm.color || null,
+        mileage:       Number(createForm.mileage) || null,
+        grade:         createForm.grade || null,
+        engine:        createForm.engine || null,
+        transmission:  createForm.transmission || 'automatic',
+        fuel_type:     createForm.fuel_type || 'petrol',
+        doors:         Number(createForm.doors) || null,
+        seats:         Number(createForm.seats) || null,
+        starting_price: Number(createForm.bid_price) || 0,
+        status:        'purchased',
       })
-      toast.success('Purchase created')
+      const car_id = carRes.data.car_id
+
+      // Step 2: create the purchase
+      await createPurchase({
+        user_id:        Number(createForm.user_id),
+        car_id,
+        auction_id:     createForm.auction_id ? Number(createForm.auction_id) : null,
+        auction_date:   createForm.auction_date || null,
+        lot_no:         createForm.lot_no || null,
+        destination:    createForm.destination || null,
+        pro_invoice_no: createForm.pro_invoice_no || null,
+        file_code_no:   createForm.file_code_no || null,
+        remarks:        createForm.remarks || null,
+        bid_price:         Number(createForm.bid_price) || 0,
+        auction_commission: Number(createForm.auction_commission) || 0,
+        transportation:    Number(createForm.transportation) || 0,
+        loading_custom:    Number(createForm.loading_custom) || 0,
+        commission:        Number(createForm.commission) || 0,
+        tax_10_percent:    Number(createForm.tax_10_percent) || 0,
+        radiation_photos:  Number(createForm.radiation_photos) || 0,
+        custom_fee:        Number(createForm.custom_fee) || 0,
+        freight:           Number(createForm.freight) || 0,
+        recycle:           Number(createForm.recycle) || 0,
+        others:            Number(createForm.others) || 0,
+      })
+
+      toast.success('Purchase created successfully')
       setShowCreate(false)
+      setCreateForm(BLANK_CREATE)
       load(page, userFilter)
-    } catch (err) { toast.error(err.response?.data?.message || 'Failed') }
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to create purchase') }
     finally { setSubmitting(false) }
   }
 
@@ -404,54 +492,182 @@ export default function AdminPurchases() {
       </Drawer>
 
       {/* Create Drawer */}
-      <Drawer open={showCreate} onClose={() => setShowCreate(false)} title="Add Manual Purchase" width={540}>
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">User *</label>
-              <select className="input" value={createForm.user_id} onChange={setC('user_id')} required>
-                <option value="">Select user…</option>
-                {users.filter(u => u.role !== 'admin').map(u => (
-                  <option key={u.user_id} value={u.user_id}>{u.name}</option>
+      <Drawer open={showCreate} onClose={() => { setShowCreate(false); setShowNewAuction(false) }}
+        title="Add Manual Purchase" width={560}>
+        <form onSubmit={handleCreate} className="space-y-5">
+
+          {/* Step 1 — User */}
+          <div>
+            <p className="label text-xs font-bold text-grey-500 uppercase tracking-wide mb-2">1. Select User</p>
+            <select className="input" value={createForm.user_id}
+              onChange={e => handleUserChange(e.target.value)} required>
+              <option value="">Select user…</option>
+              {users.filter(u => u.role !== 'admin').map(u => (
+                <option key={u.user_id} value={u.user_id}>{u.name} — {u.country}</option>
+              ))}
+            </select>
+            {createForm.user_id && (
+              <p className="text-xs text-grey-400 mt-1">
+                Pro-Invoice and Car ID auto-filled from last record
+              </p>
+            )}
+          </div>
+
+          {/* Step 2 — Auction */}
+          <div>
+            <p className="label text-xs font-bold text-grey-500 uppercase tracking-wide mb-2">2. Auction</p>
+            <div className="flex gap-2">
+              <select className="input flex-1" value={createForm.auction_id}
+                onChange={e => handleAuctionChange(e.target.value)}>
+                <option value="">No auction / select…</option>
+                {auctions.map(a => (
+                  <option key={a.auction_id} value={a.auction_id}>
+                    {a.auction_name} — {a.auction_date ? a.auction_date.slice(0,10) : 'no date'}
+                  </option>
                 ))}
               </select>
+              <button type="button" className="btn btn-secondary btn-sm whitespace-nowrap"
+                onClick={() => setShowNewAuction(v => !v)}>
+                <Plus size={13} /> New
+              </button>
             </div>
-            <div>
-              <label className="label">Car ID *</label>
-              <input className="input font-mono" type="number" value={createForm.car_id} onChange={setC('car_id')} required placeholder="e.g. 42" />
-            </div>
-            <div>
-              <label className="label">Auction ID</label>
-              <input className="input font-mono" type="number" value={createForm.auction_id} onChange={setC('auction_id')} placeholder="Optional" />
-            </div>
-            <div>
+
+            {/* Inline new auction form */}
+            {showNewAuction && (
+              <div className="mt-3 card p-4 space-y-3 bg-grey-50">
+                <p className="text-xs font-bold text-navy">Create New Auction</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="label">Auction Name *</label>
+                    <input className="input" value={newAuction.auction_name} onChange={setNA('auction_name')}
+                      placeholder="e.g. USS Tokyo" required />
+                  </div>
+                  <div>
+                    <label className="label">Location</label>
+                    <input className="input" value={newAuction.location} onChange={setNA('location')}
+                      placeholder="e.g. Tokyo, Japan" />
+                  </div>
+                  <div>
+                    <label className="label">Auction House</label>
+                    <input className="input" value={newAuction.auction_house} onChange={setNA('auction_house')}
+                      placeholder="e.g. USS" />
+                  </div>
+                  <div>
+                    <label className="label">Auction Date</label>
+                    <input className="input" type="date" value={newAuction.auction_date} onChange={setNA('auction_date')} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowNewAuction(false)}>Cancel</button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={handleCreateAuction} disabled={creatingAuction}>
+                    {creatingAuction ? 'Creating…' : 'Create & Select'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-2">
               <label className="label">Auction Date</label>
               <input className="input" type="date" value={createForm.auction_date} onChange={setC('auction_date')} />
             </div>
-            <div>
-              <label className="label">Pro-Invoice No.</label>
-              <input className="input" value={createForm.pro_invoice_no} onChange={setC('pro_invoice_no')} placeholder="e.g. ERD-1" />
-            </div>
-            <div>
-              <label className="label">File Code No.</label>
-              <input className="input" value={createForm.file_code_no} onChange={setC('file_code_no')} />
-            </div>
-            <div>
-              <label className="label">Lot No.</label>
-              <input className="input" value={createForm.lot_no} onChange={setC('lot_no')} />
-            </div>
-            <div>
-              <label className="label">Destination</label>
-              <input className="input" value={createForm.destination} onChange={setC('destination')} placeholder="e.g. Birmingham, England" />
-            </div>
-            <div className="col-span-2">
-              <label className="label">Remarks</label>
-              <textarea className="input" rows={2} value={createForm.remarks} onChange={setC('remarks')} />
+          </div>
+
+          {/* Step 3 — Car Details */}
+          <div>
+            <p className="label text-xs font-bold text-grey-500 uppercase tracking-wide mb-2">3. Car Details</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Car ID (auto)</label>
+                <input className="input font-mono bg-grey-50" value={createForm.car_id} readOnly
+                  placeholder="Select user first…" />
+              </div>
+              <div>
+                <label className="label">Chassis No.</label>
+                <input className="input font-mono" value={createForm.chassis_no} onChange={setC('chassis_no')} placeholder="e.g. GP5-3010084" />
+              </div>
+              <div>
+                <label className="label">Make *</label>
+                <input className="input" value={createForm.make} onChange={setC('make')} placeholder="Toyota" required />
+              </div>
+              <div>
+                <label className="label">Model *</label>
+                <input className="input" value={createForm.model} onChange={setC('model')} placeholder="CROWN" required />
+              </div>
+              <div>
+                <label className="label">Year</label>
+                <input className="input" type="number" value={createForm.year} onChange={setC('year')} placeholder="2015" />
+              </div>
+              <div>
+                <label className="label">Color</label>
+                <input className="input" value={createForm.color} onChange={setC('color')} placeholder="Pearl White" />
+              </div>
+              <div>
+                <label className="label">Mileage (km)</label>
+                <input className="input" type="number" value={createForm.mileage} onChange={setC('mileage')} />
+              </div>
+              <div>
+                <label className="label">Grade</label>
+                <input className="input" value={createForm.grade} onChange={setC('grade')} placeholder="A" />
+              </div>
+              <div>
+                <label className="label">Engine</label>
+                <input className="input" value={createForm.engine} onChange={setC('engine')} placeholder="2500cc" />
+              </div>
+              <div>
+                <label className="label">Transmission</label>
+                <select className="input" value={createForm.transmission} onChange={setC('transmission')}>
+                  <option value="automatic">Automatic</option>
+                  <option value="manual">Manual</option>
+                  <option value="cvt">CVT</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Fuel Type</label>
+                <select className="input" value={createForm.fuel_type} onChange={setC('fuel_type')}>
+                  <option value="petrol">Petrol</option>
+                  <option value="diesel">Diesel</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="electric">Electric</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Doors</label>
+                <input className="input" type="number" value={createForm.doors} onChange={setC('doors')} />
+              </div>
             </div>
           </div>
 
-          <div className="border-t border-grey-100 pt-3">
-            <p className="text-xs font-bold text-grey-500 mb-3">Cost Breakdown</p>
+          {/* Step 4 — Purchase Info */}
+          <div>
+            <p className="label text-xs font-bold text-grey-500 uppercase tracking-wide mb-2">4. Purchase Info</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Pro-Invoice No.</label>
+                <input className="input font-mono" value={createForm.pro_invoice_no} onChange={setC('pro_invoice_no')}
+                  placeholder="Auto-filled from last" />
+              </div>
+              <div>
+                <label className="label">File Code No.</label>
+                <input className="input" value={createForm.file_code_no} onChange={setC('file_code_no')} />
+              </div>
+              <div>
+                <label className="label">Lot No.</label>
+                <input className="input" value={createForm.lot_no} onChange={setC('lot_no')} />
+              </div>
+              <div>
+                <label className="label">Destination</label>
+                <input className="input" value={createForm.destination} onChange={setC('destination')} placeholder="Birmingham, England" />
+              </div>
+              <div className="col-span-2">
+                <label className="label">Remarks</label>
+                <textarea className="input" rows={2} value={createForm.remarks} onChange={setC('remarks')} />
+              </div>
+            </div>
+          </div>
+
+          {/* Step 5 — Cost Breakdown */}
+          <div>
+            <p className="label text-xs font-bold text-grey-500 uppercase tracking-wide mb-2">5. Cost Breakdown</p>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { key: 'bid_price',          label: 'Bid Price' },
@@ -476,9 +692,19 @@ export default function AdminPurchases() {
                 </div>
               ))}
             </div>
+            <div className="flex justify-between mt-3 pt-3 border-t-2 border-navy">
+              <span className="font-bold text-navy">Total</span>
+              <span className="font-bold font-mono text-navy">
+                ¥ {fmt(
+                  ['bid_price','auction_commission','transportation','loading_custom','commission',
+                   'tax_10_percent','radiation_photos','custom_fee','freight','recycle','others']
+                  .reduce((s, k) => s + (Number(createForm[k]) || 0), 0)
+                )}
+              </span>
+            </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-2 sticky bottom-0 bg-white pb-1">
             <button type="button" className="btn btn-secondary flex-1" onClick={() => setShowCreate(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary flex-1" disabled={submitting}>
               {submitting ? 'Creating…' : 'Create Purchase'}
