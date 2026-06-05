@@ -47,6 +47,7 @@ const buildLedger = async (userId) => {
             pd.bid_price, pd.auction_charges, pd.transportation, pd.loading_custom,
             pd.others_commission, pd.radiation_photos, pd.custom_fee, pd.freight,
             pd.others, pd.tax_10_percent, pd.recycle, pd.dealer_fee, pd.nipponbid_commission,
+            pd.is_third_party, pd.third_party_fee,
             COALESCE(p.auction_date, DATE(p.created_at)) AS entry_date,
             p.purchase_id AS source_id
      FROM purchases p
@@ -131,7 +132,7 @@ async function buildAccountExcel(userId) {
             pd.bid_price, pd.auction_charges, pd.transportation,
             pd.loading_custom, pd.others_commission, pd.tax_10_percent,
             pd.radiation_photos, pd.custom_fee, pd.freight, pd.recycle, pd.others, pd.total,
-            pd.dealer_fee, pd.nipponbid_commission
+            pd.dealer_fee, pd.nipponbid_commission, pd.is_third_party, pd.third_party_fee
      FROM purchases p
      JOIN cars c ON c.car_id = p.car_id
      LEFT JOIN auctions a ON a.auction_id = p.auction_id

@@ -35,6 +35,8 @@ function blankForm(detail, purchase) {
     auction_charges:      detail?.auction_charges      || 0,
     dealer_fee:           detail?.dealer_fee           || 0,
     nipponbid_commission: detail?.nipponbid_commission || 0,
+    is_third_party:       !!detail?.is_third_party,
+    third_party_fee:      detail?.third_party_fee      || 0,
     transportation:     detail?.transportation     || 0,
     loading_custom:     detail?.loading_custom     || 0,
     others_commission:  detail?.others_commission  || 0,
@@ -80,6 +82,7 @@ export default function AdminPurchases() {
     bid_price: '', auction_charges: '', transportation: '', loading_custom: '',
     others_commission: '', tax_10_percent: '0', radiation_photos: '0', custom_fee: '0',
     freight: '', recycle: '0', others: '0', dealer_fee: '0', nipponbid_commission: '0',
+    is_third_party: false, third_party_fee: '0',
   }
   const [createForm, setCreateForm] = useState(BLANK_CREATE)
 
@@ -194,6 +197,8 @@ export default function AdminPurchases() {
         others_commission:    Number(createForm.others_commission)    || 0,
         dealer_fee:           Number(createForm.dealer_fee)           || 0,
         nipponbid_commission: Number(createForm.nipponbid_commission) || 0,
+        is_third_party:       createForm.is_third_party ? 1 : 0,
+        third_party_fee:      Number(createForm.third_party_fee) || 0,
         tax_10_percent:    Number(createForm.tax_10_percent) || 0,
         radiation_photos:  Number(createForm.radiation_photos) || 0,
         custom_fee:        Number(createForm.custom_fee) || 0,
@@ -234,13 +239,18 @@ export default function AdminPurchases() {
   useEffect(() => {
     if (!selected) return
     let calc = 0
-    if (selectedUserType === 'dealer') {
+    if (form.is_third_party) {
+      // Third party involved (dealer or ordinary): commission - third_party_fee
+      calc = n(form.others_commission) - n(form.third_party_fee)
+    } else if (selectedUserType === 'dealer') {
+      // Dealer, no third party: dealer_fee - costs
       calc = n(form.dealer_fee) - (n(form.auction_charges) + n(form.transportation) + n(form.loading_custom) + n(form.others_commission))
     } else {
+      // Ordinary, no third party: direct commission
       calc = n(form.others_commission)
     }
     setForm(f => ({ ...f, nipponbid_commission: calc }))
-  }, [form.dealer_fee, form.auction_charges, form.transportation, form.loading_custom, form.others_commission, selectedUserType, selected])
+  }, [form.dealer_fee, form.auction_charges, form.transportation, form.loading_custom, form.others_commission, form.is_third_party, form.third_party_fee, selectedUserType, selected])
 
   const TOTAL_KEYS = ['bid_price','auction_charges','transportation','loading_custom','others_commission','radiation_photos','custom_fee']
   const total_cost = TOTAL_KEYS.reduce((sum, k) => sum + n(form[k]), 0)
@@ -440,6 +450,37 @@ export default function AdminPurchases() {
             <div>
               <p className="label">Cost Breakdown</p>
               <div className="card p-3 space-y-2">
+                {/* Third Party Toggle */}
+                <div className="flex items-center gap-3 py-1 border-b border-grey-100">
+                  <span className="text-sm text-grey-600 w-44 flex-shrink-0">Third Party Purchase</span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!form.is_third_party}
+                      onChange={e => setForm(f => ({ ...f, is_third_party: e.target.checked }))}
+                      className="w-4 h-4 accent-red-600"
+                    />
+                    <span className="text-sm text-grey-500">{form.is_third_party ? 'Yes' : 'No'}</span>
+                  </label>
+                </div>
+
+                {/* Third Party Fee — only shown when is_third_party is checked */}
+                {form.is_third_party && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-grey-600 w-44 flex-shrink-0">Third Party Fee</span>
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
+                      <input
+                        type="number"
+                        className="input pl-7 font-mono text-right"
+                        value={form.third_party_fee ?? 0}
+                        onChange={set('third_party_fee')}
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {COST_FIELDS.map(({ key, label }) => (
                   <div key={key} className="flex items-center gap-3">
                     <span className="text-sm text-grey-600 w-44 flex-shrink-0">{label}</span>

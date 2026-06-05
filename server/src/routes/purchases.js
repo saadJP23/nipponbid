@@ -145,7 +145,7 @@ router.post('/', adminAuth, async (req, res) => {
     const { user_id, car_id, auction_id, auction_date, lot_no, destination, pro_invoice_no, file_code_no, remarks,
             bid_price, auction_charges, transportation, loading_custom, commission,
             tax_10_percent, radiation_photos, custom_fee, freight, recycle, others,
-            dealer_fee, nipponbid_commission } = req.body;
+            dealer_fee, nipponbid_commission, is_third_party, third_party_fee } = req.body;
 
     const [result] = await db.query(
       `INSERT INTO purchases (user_id, car_id, auction_id, auction_date, lot_no, destination, pro_invoice_no, file_code_no, remarks)
@@ -157,11 +157,11 @@ router.post('/', adminAuth, async (req, res) => {
     // Insert purchase_details if cost breakdown provided
     if (bid_price) {
       await db.query(
-        `INSERT INTO purchase_details (purchase_id, bid_price, auction_charges, transportation, loading_custom, others_commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others, dealer_fee, nipponbid_commission)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO purchase_details (purchase_id, bid_price, auction_charges, transportation, loading_custom, others_commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others, dealer_fee, nipponbid_commission, is_third_party, third_party_fee)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [result.insertId, bid_price, auction_charges||0, transportation||0, loading_custom||0,
          commission||0, tax_10_percent||0, radiation_photos||0, custom_fee||0, freight||0, recycle||0, others||0,
-         dealer_fee||0, nipponbid_commission||0]
+         dealer_fee||0, nipponbid_commission||0, is_third_party?1:0, third_party_fee||0]
       );
     }
 
@@ -182,7 +182,7 @@ router.put('/:id', adminAuth, async (req, res) => {
     const { destination, pro_invoice_no, file_code_no, lot_no, remarks,
             bid_price, auction_charges, transportation, loading_custom,
             commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others,
-            dealer_fee, nipponbid_commission } = req.body;
+            dealer_fee, nipponbid_commission, is_third_party, third_party_fee } = req.body;
 
     const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
     if (!purchase.length) return res.status(404).json({ message: 'Purchase not found' });
@@ -196,13 +196,13 @@ router.put('/:id', adminAuth, async (req, res) => {
     const n = (v) => Number(v) || 0;
     if (existing.length) {
       await db.query(
-        `UPDATE purchase_details SET bid_price=?,auction_charges=?,transportation=?,loading_custom=?,others_commission=?,tax_10_percent=?,radiation_photos=?,custom_fee=?,freight=?,recycle=?,others=?,dealer_fee=?,nipponbid_commission=? WHERE purchase_id=?`,
-        [n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission),req.params.id]
+        `UPDATE purchase_details SET bid_price=?,auction_charges=?,transportation=?,loading_custom=?,others_commission=?,tax_10_percent=?,radiation_photos=?,custom_fee=?,freight=?,recycle=?,others=?,dealer_fee=?,nipponbid_commission=?,is_third_party=?,third_party_fee=? WHERE purchase_id=?`,
+        [n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission),is_third_party?1:0,n(third_party_fee),req.params.id]
       );
     } else {
       await db.query(
-        `INSERT INTO purchase_details (purchase_id,bid_price,auction_charges,transportation,loading_custom,others_commission,tax_10_percent,radiation_photos,custom_fee,freight,recycle,others,dealer_fee,nipponbid_commission) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [req.params.id,n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission)]
+        `INSERT INTO purchase_details (purchase_id,bid_price,auction_charges,transportation,loading_custom,others_commission,tax_10_percent,radiation_photos,custom_fee,freight,recycle,others,dealer_fee,nipponbid_commission,is_third_party,third_party_fee) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [req.params.id,n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission),is_third_party?1:0,n(third_party_fee)]
       );
     }
 
