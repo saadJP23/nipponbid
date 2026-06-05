@@ -38,7 +38,7 @@ const buildLedger = async (userId) => {
     [userId]
   );
 
-  // Debits — car purchases with full breakdown for on-the-fly total calculation
+  // Debits — all car purchases (LEFT JOIN so purchases without cost details are included with 0 debit)
   const [purchaseRows] = await db.query(
     `SELECT 'purchase' AS entry_type,
             CONCAT('P-', p.purchase_id) AS ref,
@@ -51,8 +51,8 @@ const buildLedger = async (userId) => {
             p.purchase_id AS source_id
      FROM purchases p
      JOIN cars c ON c.car_id = p.car_id
-     JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
-     WHERE p.user_id = ? AND pd.bid_price IS NOT NULL AND pd.bid_price > 0`,
+     LEFT JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
+     WHERE p.user_id = ?`,
     [userId]
   );
 
