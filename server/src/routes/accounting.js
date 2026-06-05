@@ -103,12 +103,14 @@ async function buildAccountExcel(userId) {
     [userId]
   );
 
-  // Shipment details
+  // Shipment details (bl_status lives in the bl table, not shipping)
   const [shipments] = await db.query(
     `SELECT s.purchase_id, s.etd, s.eta, s.ship_name, s.route,
-            s.result_of_inspection, s.bl_status, s.port_of_loading, s.port_of_discharge
+            s.result_of_inspection,
+            bl.port_of_loading, bl.port_of_discharge, bl.status AS bl_status
      FROM shipping s
      JOIN purchases p ON p.purchase_id = s.purchase_id
+     LEFT JOIN bl ON bl.shipping_id = s.shipping_id
      WHERE p.user_id = ?`, [userId]
   );
   const shipMap = {};
