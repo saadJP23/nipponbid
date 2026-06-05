@@ -229,6 +229,19 @@ export default function AdminPurchases() {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // Auto-calculate nipponbid_commission on the fly
+  const selectedUserType = selected ? (users.find(u => u.user_id === selected.user_id)?.type || 'ordinary') : 'ordinary'
+  useEffect(() => {
+    if (!selected) return
+    let calc = 0
+    if (selectedUserType === 'dealer') {
+      calc = n(form.dealer_fee) - (n(form.auction_charges) + n(form.transportation) + n(form.loading_custom) + n(form.others_commission))
+    } else {
+      calc = n(form.others_commission)
+    }
+    setForm(f => ({ ...f, nipponbid_commission: calc }))
+  }, [form.dealer_fee, form.auction_charges, form.transportation, form.loading_custom, form.others_commission, selectedUserType, selected])
+
   const TOTAL_KEYS = ['bid_price','auction_charges','transportation','loading_custom','others_commission','radiation_photos','custom_fee']
   const total_cost = TOTAL_KEYS.reduce((sum, k) => sum + n(form[k]), 0)
 
@@ -430,16 +443,23 @@ export default function AdminPurchases() {
                 {COST_FIELDS.map(({ key, label }) => (
                   <div key={key} className="flex items-center gap-3">
                     <span className="text-sm text-grey-600 w-44 flex-shrink-0">{label}</span>
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
-                      <input
-                        type="number"
-                        className="input pl-7 font-mono text-right"
-                        value={form[key] ?? 0}
-                        onChange={set(key)}
-                        min="0"
-                      />
-                    </div>
+                    {key === 'nipponbid_commission' ? (
+                      <div className="flex-1 flex items-center justify-between px-3 py-2 rounded bg-green-50 border border-green-200">
+                        <span className="text-xs text-green-600 italic">auto-calculated</span>
+                        <span className="font-mono font-semibold text-green-700">¥ {fmt(form[key] ?? 0)}</span>
+                      </div>
+                    ) : (
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
+                        <input
+                          type="number"
+                          className="input pl-7 font-mono text-right"
+                          value={form[key] ?? 0}
+                          onChange={set(key)}
+                          min="0"
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div className="flex justify-between pt-3 mt-1 border-t-2 border-navy">
