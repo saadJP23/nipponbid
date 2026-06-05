@@ -3,232 +3,183 @@ const db = require('../config/database');
 const { adminAuth } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 
+// ── Stats ─────────────────────────────────────────────────────────────────────
 router.get('/stats', adminAuth, async (req, res) => {
   try {
     const { date_from, date_to, user_id, country } = req.query;
 
-    const shinWhere = [];
-    const shinP     = [];
-    if (date_from) { shinWhere.push('c.auction_date >= ?'); shinP.push(date_from); }
-    if (date_to)   { shinWhere.push('c.auction_date <= ?'); shinP.push(date_to);   }
-    if (user_id)   { shinWhere.push('sp.user_id = ?');      shinP.push(+user_id);  }
-    if (country)   { shinWhere.push('u.country = ?');       shinP.push(country);   }
-    const shinW = shinWhere.length ? `WHERE ${shinWhere.join(' AND ')}` : '';
+    const pWhere = ['1=1'];
+    const pParams = [];
+    if (date_from) { pWhere.push('p.auction_date >= ?'); pParams.push(date_from); }
+    if (date_to)   { pWhere.push('p.auction_date <= ?'); pParams.push(date_to); }
+    if (user_id)   { pWhere.push('p.user_id = ?');       pParams.push(+user_id); }
+    if (country)   { pWhere.push('u.country = ?');       pParams.push(country); }
 
-    const remWhere  = ["r.status = 'confirmed'"];
-    const remP      = [];
-    if (user_id) { remWhere.push('r.user_id = ?'); remP.push(+user_id); }
-    if (country) { remWhere.push('u.country = ?'); remP.push(country);  }
-    const remJoin = country ? 'JOIN users u ON u.id = r.user_id' : '';
-    const remW    = `WHERE ${remWhere.join(' AND ')}`;
+    const remWhere = ["r.status = 'confirmed'"];
+    const remParams = [];
+    const remJoin = country ? 'JOIN users u ON u.user_id = r.user_id' : '';
+    if (user_id) { remWhere.push('r.user_id = ?'); remParams.push(+user_id); }
+    if (country) { remWhere.push('u.country = ?'); remParams.push(country); }
 
-    const invWhere = [];
-    const invP     = [];
-    if (user_id) { invWhere.push('user_id = ?'); invP.push(+user_id); }
-    const invW = invWhere.length ? `AND ${invWhere.join(' AND ')}` : '';
+    const invWhere = user_id ? 'AND user_id = ?' : '';
+    const invParams = user_id ? [+user_id] : [];
 
-    const [[{ total_users }]] = await db.query("SELECT COUNT(*) as total_users FROM users WHERE role = 'user'");
-
-    const shinBidWhere = ["sb.status = 'pending'"];
-    const shinBidP     = [];
-    if (user_id) { shinBidWhere.push('sb.user_id = ?'); shinBidP.push(+user_id); }
-    if (country) { shinBidWhere.push('u.country = ?');  shinBidP.push(country); }
-    const [[{ pending_bids }]] = await db.query(
-      `SELECT COUNT(*) as pending_bids FROM japan_bids sb
-       JOIN users u ON u.id = sb.user_id
-       WHERE ${shinBidWhere.join(' AND ')}`, shinBidP
-    );
-
-    const [[{ total_parts }]] = await db.query(
-      `SELECT COUNT(*) as total_parts FROM parts_purchases WHERE 1=1 ${invW}`, invP
-    );
-
+    const [[{ total_users }]] = await db.query("SELECT COUNT(*) AS total_users FROM users WHERE role = 'user'");
+    const [[{ pending_bids }]] = await db.query("SELECT COUNT(*) AS pending_bids FROM bids WHERE status = 'pending'");
+    const [[{ total_parts }]] = await db.query(`SELECT COUNT(*) AS total_parts FROM parts_purchases WHERE 1=1 ${invWhere}`, invParams);
     const [[{ proforma_unpaid }]] = await db.query(
-      `SELECT COALESCE(SUM(amount - paid_amount), 0) as proforma_unpaid
-       FROM proforma_invoices WHERE status != 'paid' ${invW}`, invP
+      `SELECT COALESCE(SUM(amount - paid_amount), 0) AS proforma_unpaid FROM proforma_invoices WHERE status != 'paid' ${invWhere}`, invParams
     );
     const [[{ final_unpaid }]] = await db.query(
-      `SELECT COALESCE(SUM(amount - paid_amount), 0) as final_unpaid
-       FROM final_invoices WHERE status NOT IN ('paid','archived') ${invW}`, invP
+      `SELECT COALESCE(SUM(amount - paid_amount), 0) AS final_unpaid FROM final_invoices WHERE status NOT IN ('paid','archived') ${invWhere}`, invParams
     );
-
-    const BASE = `FROM japan_purchases sp JOIN japan_cars c ON c.pid = sp.pid JOIN users u ON u.id = sp.user_id ${shinW}`;
-
-    const [[{ total_purchases }]] = await db.query(`SELECT COUNT(sp.id) as total_purchases ${BASE}`, shinP);
-    const [[{ total_revenue }]]   = await db.query(`SELECT COALESCE(SUM(COALESCE(sp.commission,0) + COALESCE(sp.auction_commission,0)), 0) as total_revenue ${BASE}`, shinP);
-    const [[{ total_billed_cars }]] = await db.query(`SELECT COALESCE(SUM(sp.total), 0) as total_billed_cars ${BASE}`, shinP);
-    const [[{ total_billed_parts }]] = await db.query(
-      `SELECT COALESCE(SUM(total), 0) as total_billed_parts FROM japan_parts_purchases`
+    const [[{ total_purchases }]] = await db.query(
+      `SELECT COUNT(*) AS total_purchases FROM purchases p JOIN users u ON u.user_id = p.user_id WHERE ${pWhere.join(' AND ')}`, pParams
     );
-    const total_billed = Number(total_billed_cars) + Number(total_billed_parts);
-    const [[{ total_received }]]  = await db.query(`SELECT COALESCE(SUM(r.deposit_amount), 0) as total_received FROM remittances r ${remJoin} ${remW}`, remP);
-    const remittance_confirmed = Number(total_received);
-
-    const receivable_amount = Math.max(0, Number(total_billed) - Number(total_received));
-
+    const [[{ total_billed }]] = await db.query(
+      `SELECT COALESCE(SUM(pd.total), 0) AS total_billed
+       FROM purchase_details pd JOIN purchases p ON p.purchase_id = pd.purchase_id
+       JOIN users u ON u.user_id = p.user_id WHERE ${pWhere.join(' AND ')}`, pParams
+    );
+    const [[{ total_received }]] = await db.query(
+      `SELECT COALESCE(SUM(r.deposit_amount), 0) AS total_received FROM remittances r ${remJoin} WHERE ${remWhere.join(' AND ')}`, remParams
+    );
     const [[{ in_transit_count }]] = await db.query(
-      `SELECT COUNT(sp.id) as in_transit_count
-       FROM japan_purchases sp JOIN japan_cars c ON c.pid = sp.pid JOIN users u ON u.id = sp.user_id
-       ${shinW ? shinW + " AND sp.bl_status IN ('loaded','in_transit')" : "WHERE sp.bl_status IN ('loaded','in_transit')"}`,
-      shinP
+      `SELECT COUNT(*) AS in_transit_count FROM shipping s
+       JOIN purchases p ON p.purchase_id = s.purchase_id
+       JOIN users u ON u.user_id = p.user_id
+       WHERE s.eta > CURDATE() AND ${pWhere.join(' AND ')}`, pParams
     );
 
+    // Recent purchases
     const [recent_purchases] = await db.query(
-      `SELECT sp.id, sp.user_id, sp.total, sp.commission, sp.created_at,
-              c.make, c.model, c.year, c.image_url, c.auction_date, c.chassis, c.auction_house,
-              u.name as user_name, u.country as user_country
-       ${BASE} ORDER BY sp.created_at DESC LIMIT 5`,
-      shinP
+      `SELECT p.purchase_id, p.file_code_no, p.auction_date, p.created_at,
+              c.make, c.model, c.year, c.chassis_no,
+              u.name AS user_name, u.country AS user_country,
+              pd.total AS admin_total,
+              ci.url AS car_image
+       FROM purchases p
+       JOIN cars c ON c.car_id = p.car_id
+       JOIN users u ON u.user_id = p.user_id
+       JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
+       LEFT JOIN car_images ci ON ci.car_id = c.car_id AND ci.is_primary = 1
+       WHERE ${pWhere.join(' AND ')}
+       ORDER BY p.created_at DESC LIMIT 5`, pParams
     );
 
-    const monthlyWhere = [...shinWhere, 'c.auction_date IS NOT NULL', 'sp.total IS NOT NULL'];
-    const monthlyP     = [...shinP];
+    // Monthly billed
+    const monthlyWhere = [...pWhere, 'p.auction_date IS NOT NULL'];
     if (!date_from && !date_to) {
-      monthlyWhere.push('c.auction_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), \'%Y-%m-01\')');
+      monthlyWhere.push("p.auction_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')");
     }
-    const monthlyW    = `WHERE ${monthlyWhere.join(' AND ')}`;
-    const MONTHLY_BASE = `FROM japan_purchases sp JOIN japan_cars c ON c.pid = sp.pid JOIN users u ON u.id = sp.user_id ${monthlyW}`;
-
-    const [monthly_revenue] = await db.query(
-      `SELECT DATE_FORMAT(c.auction_date, '%Y-%m') as month,
-              COALESCE(SUM(COALESCE(sp.commission,0) + COALESCE(sp.auction_commission,0)), 0) as revenue,
-              COALESCE(SUM(sp.total), 0) as billed,
-              COUNT(*) as sales
-       ${MONTHLY_BASE}
-       GROUP BY month ORDER BY month ASC`,
-      monthlyP
+    const [monthly_billed] = await db.query(
+      `SELECT DATE_FORMAT(p.auction_date, '%Y-%m') AS month,
+              COALESCE(SUM(pd.total), 0) AS billed, COUNT(*) AS sales
+       FROM purchases p
+       JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
+       JOIN users u ON u.user_id = p.user_id
+       WHERE ${monthlyWhere.join(' AND ')}
+       GROUP BY month ORDER BY month ASC`, pParams
     );
 
-    // Monthly remittances received (last 12 months)
+    // Monthly received
     const [monthly_received] = await db.query(
-      `SELECT DATE_FORMAT(r.tt_date, '%Y-%m') as month,
-              COALESCE(SUM(r.deposit_amount), 0) as received,
-              COUNT(*) as payments
-       FROM remittances r
-       JOIN users u ON u.id = r.user_id
-       WHERE r.status = 'confirmed'
+      `SELECT DATE_FORMAT(r.tt_date, '%Y-%m') AS month,
+              COALESCE(SUM(r.deposit_amount), 0) AS received, COUNT(*) AS payments
+       FROM remittances r ${remJoin}
+       WHERE ${remWhere.join(' AND ')}
          AND r.tt_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
-       GROUP BY month ORDER BY month ASC`
+       GROUP BY month ORDER BY month ASC`, remParams
     );
 
+    // Recent pending bids
     const [recent_bids] = await db.query(
-      `SELECT sb.*, u.name as user_name, sc.make, sc.model, sc.year
-       FROM japan_bids sb JOIN users u ON u.id = sb.user_id
-       LEFT JOIN japan_cars sc ON sc.pid = sb.pid
-       WHERE sb.status = 'pending' ORDER BY sb.created_at DESC LIMIT 5`
+      `SELECT b.bid_id, b.amount, b.status, b.created_at,
+              u.name AS user_name, c.make, c.model, c.year
+       FROM bids b
+       JOIN users u ON u.user_id = b.user_id
+       JOIN cars c ON c.car_id = b.car_id
+       WHERE b.status = 'pending' ORDER BY b.created_at DESC LIMIT 5`
     );
 
-    const [bid_stats] = await db.query(
-      `SELECT sb.status, COUNT(*) as count FROM japan_bids sb
-       JOIN users u ON u.id = sb.user_id
-       ${shinBidWhere.length > 1 ? 'WHERE ' + shinBidWhere.slice(1).join(' AND ') : ''}
-       GROUP BY sb.status`,
-      shinBidP.slice(0)
-    );
-
-    const inTransitWhere = [...shinWhere, "sp.bl_status IN ('loaded','in_transit')"];
+    // In transit
     const [in_transit] = await db.query(
-      `SELECT sp.id as purchase_id, sp.file_code, sp.total, sp.bl_status,
-              sc.make, sc.model, sc.year, sc.chassis,
-              u.name as user_name,
-              sp.ship_name, sp.eta, sp.etd, sp.destination as port_of_discharge
-       FROM japan_purchases sp
-       JOIN japan_cars sc ON sc.pid = sp.pid
-       JOIN users u ON u.id = sp.user_id
-       WHERE ${inTransitWhere.join(' AND ')}
-       ORDER BY sp.eta ASC LIMIT 20`,
-      [...shinP]
+      `SELECT p.purchase_id, p.file_code_no,
+              c.make, c.model, c.year, c.chassis_no,
+              u.name AS user_name,
+              s.ship_name, s.etd, s.eta, s.route
+       FROM purchases p
+       JOIN cars c ON c.car_id = p.car_id
+       JOIN users u ON u.user_id = p.user_id
+       JOIN shipping s ON s.purchase_id = p.purchase_id
+       WHERE s.eta > CURDATE() AND ${pWhere.join(' AND ')}
+       ORDER BY s.eta ASC LIMIT 20`, pParams
     );
 
-    const [stock_by_make] = await db.query(
-      `SELECT sc.make, COUNT(*) as count
-       FROM japan_purchases sp
-       JOIN japan_cars sc ON sc.pid = sp.pid
-       JOIN users u ON u.id = sp.user_id
-       ${shinW}
-       GROUP BY sc.make ORDER BY count DESC LIMIT 10`,
-      shinP
-    );
-
+    // Customer summary
     const [customer_rows] = await db.query(
-      `SELECT u.id, u.name, u.country,
-              COUNT(sp.id)                                                                    as purchases,
-              COALESCE(SUM(sp.total), 0)                                                     as total_billed,
-              COALESCE(SUM(COALESCE(sp.commission,0) + COALESCE(sp.auction_commission,0)), 0) as total_commission
-       ${BASE}
-       GROUP BY u.id, u.name, u.country
-       ORDER BY total_billed DESC`,
-      shinP
+      `SELECT u.user_id, u.name, u.country, u.type,
+              COUNT(p.purchase_id) AS purchases,
+              COALESCE(SUM(pd.total), 0) AS total_billed
+       FROM purchases p
+       JOIN users u ON u.user_id = p.user_id
+       JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
+       WHERE ${pWhere.join(' AND ')}
+       GROUP BY u.user_id ORDER BY total_billed DESC`, pParams
     );
-    // Parts billed per user
-    const [perUserParts] = await db.query(
-      `SELECT user_id, COALESCE(SUM(total),0) as parts_billed
-       FROM japan_parts_purchases GROUP BY user_id`
-    );
-    const partsMap = {};
-    perUserParts.forEach(r => { partsMap[r.user_id] = Number(r.parts_billed); });
-
     const [perUserRec] = await db.query(
-      `SELECT r.user_id, COALESCE(SUM(r.deposit_amount), 0) as received
-       FROM remittances r ${remJoin} ${remW}
-       GROUP BY r.user_id`,
-      remP
+      `SELECT r.user_id, COALESCE(SUM(r.deposit_amount), 0) AS received
+       FROM remittances r ${remJoin} WHERE ${remWhere.join(' AND ')}
+       GROUP BY r.user_id`, remParams
     );
     const receivedMap = {};
     perUserRec.forEach(r => { receivedMap[r.user_id] = Number(r.received); });
     const customer_summary = customer_rows.map(row => ({
       ...row,
-      total_billed:    Number(row.total_billed) + (partsMap[row.id] || 0),
-      total_commission:Number(row.total_commission),
-      total_received:  receivedMap[row.id] || 0,
-      balance:         (receivedMap[row.id] || 0) - Number(row.total_billed) - (partsMap[row.id] || 0),
+      total_billed:   Number(row.total_billed),
+      total_received: receivedMap[row.user_id] || 0,
+      balance:        (receivedMap[row.user_id] || 0) - Number(row.total_billed),
     }));
 
-    const [users_list] = await db.query(
-      "SELECT id, name, country FROM users WHERE role = 'user' ORDER BY name"
-    );
-    const [countries_list] = await db.query(
-      "SELECT DISTINCT country FROM users WHERE role = 'user' AND country IS NOT NULL AND country != '' ORDER BY country"
-    );
+    const [users_list] = await db.query("SELECT user_id, name, country FROM users WHERE role = 'user' ORDER BY name");
+    const [countries_list] = await db.query("SELECT DISTINCT country FROM users WHERE role = 'user' AND country IS NOT NULL AND country != '' ORDER BY country");
 
     res.json({
-      stats: { total_users, pending_bids, total_purchases, total_revenue, total_parts,
-               in_transit_count, remittance_confirmed, proforma_unpaid, final_unpaid,
-               receivable_amount, total_billed: Number(total_billed), total_received: Number(total_received) },
-      recent_bids,
-      recent_purchases,
-      monthly_revenue, monthly_received,
-      bid_stats,
-      in_transit,
-      stock_by_make,
-      customer_summary,
-      users_list,
-      countries_list,
+      stats: {
+        total_users, pending_bids, total_purchases, total_parts,
+        in_transit_count, proforma_unpaid, final_unpaid,
+        total_billed: Number(total_billed),
+        total_received: Number(total_received),
+        receivable_amount: Math.max(0, Number(total_billed) - Number(total_received)),
+      },
+      recent_purchases, recent_bids, monthly_billed, monthly_received,
+      in_transit, customer_summary, users_list, countries_list,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// ── Users ─────────────────────────────────────────────────────────────────────
 router.get('/users', adminAuth, async (req, res) => {
   try {
-    const { search, page = 1, limit = 15 } = req.query;
+    const { search, type, page = 1, limit = 15 } = req.query;
     let where = "role = 'user'";
     const params = [];
     if (search) { where += ' AND (name LIKE ? OR email LIKE ? OR country LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+    if (type)   { where += ' AND type = ?'; params.push(type); }
     const offset = (page - 1) * limit;
-    const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM users WHERE ${where}`, params);
+    const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM users WHERE ${where}`, params);
     const [rows] = await db.query(
-      `SELECT u.id, u.name, u.email, u.phone, u.country, u.city, u.is_active, u.created_at,
-              (COUNT(DISTINCT b.id) + COUNT(DISTINCT jb.id))  as total_bids,
-              (COUNT(DISTINCT p.id) + COUNT(DISTINCT jp.id))  as total_purchases
+      `SELECT u.user_id, u.name, u.email, u.contact_number, u.country, u.city,
+              u.role, u.type, u.status, u.created_at,
+              COUNT(DISTINCT b.bid_id) AS total_bids,
+              COUNT(DISTINCT p.purchase_id) AS total_purchases
        FROM users u
-       LEFT JOIN bids b         ON b.user_id  = u.id
-       LEFT JOIN purchases p    ON p.user_id  = u.id
-       LEFT JOIN japan_bids jb  ON jb.user_id = u.id
-       LEFT JOIN japan_purchases jp ON jp.user_id = u.id
+       LEFT JOIN bids b      ON b.user_id = u.user_id
+       LEFT JOIN purchases p ON p.user_id = u.user_id
        WHERE ${where}
-       GROUP BY u.id ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
+       GROUP BY u.user_id ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
     );
     res.json({ users: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
@@ -240,45 +191,28 @@ router.get('/users', adminAuth, async (req, res) => {
 router.get('/users/:id', adminAuth, async (req, res) => {
   try {
     const [[user]] = await db.query(
-      `SELECT u.id, u.name, u.email, u.phone, u.country, u.city, u.is_active, u.created_at,
-              COUNT(DISTINCT b.id)  as total_bids,
-              COUNT(DISTINCT p.id)  as total_purchases,
-              COUNT(DISTINCT sb.id) as total_japan_bids,
-              COUNT(DISTINCT sp.id) as total_japan_purchases
+      `SELECT u.user_id, u.name, u.email, u.contact_number, u.country, u.city,
+              u.role, u.type, u.status, u.created_at,
+              COUNT(DISTINCT b.bid_id)      AS total_bids,
+              COUNT(DISTINCT p.purchase_id) AS total_purchases
        FROM users u
-       LEFT JOIN bids b ON b.user_id = u.id
-       LEFT JOIN purchases p ON p.user_id = u.id
-       LEFT JOIN japan_bids sb ON sb.user_id = u.id
-       LEFT JOIN japan_purchases sp ON sp.user_id = u.id
-       WHERE u.id = ? GROUP BY u.id`,
+       LEFT JOIN bids b      ON b.user_id = u.user_id
+       LEFT JOIN purchases p ON p.user_id = u.user_id
+       WHERE u.user_id = ? GROUP BY u.user_id`,
       [req.params.id]
     );
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const [remRows] = await db.query(
-      "SELECT COALESCE(SUM(deposit_amount),0) as total FROM remittances WHERE user_id = ? AND status='confirmed'",
+    const [[{ total_received }]] = await db.query(
+      "SELECT COALESCE(SUM(deposit_amount),0) AS total_received FROM remittances WHERE user_id = ? AND status='confirmed'",
       [req.params.id]
     );
-    const [proRows] = await db.query(
-      "SELECT COALESCE(SUM(amount),0) as total FROM proforma_invoices WHERE user_id = ?",
-      [req.params.id]
+    const [[{ total_billed }]] = await db.query(
+      `SELECT COALESCE(SUM(pd.total),0) AS total_billed
+       FROM purchase_details pd JOIN purchases p ON p.purchase_id = pd.purchase_id
+       WHERE p.user_id = ?`, [req.params.id]
     );
-    const [finRows] = await db.query(
-      "SELECT COALESCE(SUM(amount),0) as total FROM final_invoices WHERE user_id = ?",
-      [req.params.id]
-    );
-    const [shinRows] = await db.query(
-      "SELECT COALESCE(SUM(total),0) as total FROM japan_purchases WHERE user_id = ? AND total > 0",
-      [req.params.id]
-    );
-    const [partsRows] = await db.query(
-      "SELECT COALESCE(SUM(total),0) as total FROM japan_parts_purchases WHERE user_id = ?",
-      [req.params.id]
-    );
-    const totalCredit = Number(remRows[0].total);
-    const totalDebit  = Number(proRows[0].total) + Number(finRows[0].total) +
-                        Number(shinRows[0].total) + Number(partsRows[0].total);
-    res.json({ ...user, totalCredit, totalDebit, balance: totalCredit - totalDebit });
+    res.json({ ...user, total_received: Number(total_received), total_billed: Number(total_billed), balance: Number(total_received) - Number(total_billed) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -286,17 +220,18 @@ router.get('/users/:id', adminAuth, async (req, res) => {
 
 router.post('/users', adminAuth, async (req, res) => {
   try {
-    const { name, email, password, phone, country, city, role } = req.body;
+    const { name, email, password, contact_number, country, city, role, type } = req.body;
     if (!name || !email || !password) return res.status(400).json({ message: 'Name, email and password are required' });
-    const [[exists]] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+    const [[exists]] = await db.query('SELECT user_id FROM users WHERE email = ?', [email]);
     if (exists) return res.status(409).json({ message: 'A user with this email already exists' });
     const hash = await bcrypt.hash(password, 10);
     const [result] = await db.query(
-      'INSERT INTO users (name, email, password, phone, country, city, role, is_active) VALUES (?,?,?,?,?,?,?,1)',
-      [name, email, hash, phone || null, country || null, city || null, role === 'admin' ? 'admin' : 'user']
+      'INSERT INTO users (name, email, password, contact_number, country, city, role, type) VALUES (?,?,?,?,?,?,?,?)',
+      [name, email, hash, contact_number || null, country || null, city || null,
+       role === 'admin' ? 'admin' : 'user', type || 'ordinary']
     );
     const [[user]] = await db.query(
-      'SELECT id, name, email, phone, country, city, role, is_active, created_at FROM users WHERE id=?',
+      'SELECT user_id, name, email, contact_number, country, city, role, type, status, created_at FROM users WHERE user_id=?',
       [result.insertId]
     );
     res.status(201).json(user);
@@ -305,13 +240,13 @@ router.post('/users', adminAuth, async (req, res) => {
 
 router.put('/users/:id', adminAuth, async (req, res) => {
   try {
-    const { name, email, phone, country, city } = req.body;
+    const { name, email, contact_number, country, city, type } = req.body;
     await db.query(
-      'UPDATE users SET name=?, email=?, phone=?, country=?, city=? WHERE id=?',
-      [name || null, email || null, phone || null, country || null, city || null, req.params.id]
+      'UPDATE users SET name=?, email=?, contact_number=?, country=?, city=?, type=? WHERE user_id=?',
+      [name || null, email || null, contact_number || null, country || null, city || null, type || null, req.params.id]
     );
     const [[user]] = await db.query(
-      'SELECT id, name, email, phone, country, city, is_active, created_at FROM users WHERE id=?',
+      'SELECT user_id, name, email, contact_number, country, city, role, type, status, created_at FROM users WHERE user_id=?',
       [req.params.id]
     );
     res.json(user);
@@ -322,9 +257,12 @@ router.put('/users/:id', adminAuth, async (req, res) => {
 
 router.put('/users/:id/toggle', adminAuth, async (req, res) => {
   try {
-    await db.query('UPDATE users SET is_active = NOT is_active WHERE id = ?', [req.params.id]);
-    const [user] = await db.query('SELECT id, name, email, is_active FROM users WHERE id = ?', [req.params.id]);
-    res.json(user[0]);
+    const [[user]] = await db.query('SELECT status FROM users WHERE user_id = ?', [req.params.id]);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const newStatus = user.status === 'active' ? 'inactive' : 'active';
+    await db.query('UPDATE users SET status = ? WHERE user_id = ?', [newStatus, req.params.id]);
+    const [[updated]] = await db.query('SELECT user_id, name, email, status FROM users WHERE user_id = ?', [req.params.id]);
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -334,10 +272,10 @@ router.post('/notify', adminAuth, async (req, res) => {
   try {
     const { user_id, title, message, type } = req.body;
     if (user_id === 'all') {
-      const [users] = await db.query("SELECT id FROM users WHERE role = 'user' AND is_active = 1");
+      const [users] = await db.query("SELECT user_id FROM users WHERE role = 'user' AND status = 'active'");
       await Promise.all(users.map(u => db.query(
         'INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)',
-        [u.id, title, message, type || 'general']
+        [u.user_id, title, message, type || 'general']
       )));
       res.json({ message: `Notification sent to ${users.length} users` });
     } else {
@@ -347,35 +285,6 @@ router.post('/notify', adminAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-});
-
-const { cleanupOldCars } = require('../scripts/cleanupCars');
-
-router.get('/cleanup-cars/preview', adminAuth, async (req, res) => {
-  try {
-    const stats = await cleanupOldCars(true);
-    res.json(stats);
-  } catch (err) { res.status(500).json({ message: err.message }); }
-});
-
-router.post('/cleanup-cars', adminAuth, async (req, res) => {
-  try {
-    const stats = await cleanupOldCars(false);
-    res.json(stats);
-  } catch (err) { res.status(500).json({ message: err.message }); }
-});
-
-router.post('/run-scraper', adminAuth, (req, res) => {
-  const { spawn } = require('child_process');
-  const path = require('path');
-  const script = path.join(__dirname, '../scripts/shinchuoAgent.js');
-  const child = spawn(process.execPath, [script], {
-    detached: true,
-    stdio: 'ignore',
-    env: process.env,
-  });
-  child.unref();
-  res.json({ message: 'Scraper started in background' });
 });
 
 module.exports = router;

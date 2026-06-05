@@ -20,7 +20,7 @@ router.get('/', auth, async (req, res) => {
 
 router.put('/:id/read', auth, async (req, res) => {
   try {
-    await db.query('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+    await db.query('UPDATE notifications SET is_read = 1 WHERE notification_id = ? AND user_id = ?', [req.params.id, req.user.id]);
     res.json({ message: 'Marked as read' });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -38,7 +38,7 @@ router.put('/read-all', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    await db.query('DELETE FROM notifications WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+    await db.query('DELETE FROM notifications WHERE notification_id = ? AND user_id = ?', [req.params.id, req.user.id]);
     res.json({ message: 'Notification deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
