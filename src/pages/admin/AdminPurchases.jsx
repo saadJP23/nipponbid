@@ -13,7 +13,7 @@ const COST_FIELDS = [
   { key: 'auction_commission', label: 'Auction Commission' },
   { key: 'transportation',     label: 'Transportation' },
   { key: 'loading_custom',     label: 'Loading / Custom' },
-  { key: 'commission',         label: 'Commission' },
+  { key: 'others_commission',  label: 'Others Commission' },
   { key: 'tax_10_percent',     label: 'Tax (10%)' },
   { key: 'radiation_photos',   label: 'Radiation / Photos' },
   { key: 'custom_fee',         label: 'Custom Fee' },
@@ -33,7 +33,7 @@ function blankForm(detail, purchase) {
     auction_commission: detail?.auction_commission || 0,
     transportation:     detail?.transportation     || 0,
     loading_custom:     detail?.loading_custom     || 0,
-    commission:         detail?.commission         || 0,
+    others_commission:  detail?.others_commission  || 0,
     tax_10_percent:     detail?.tax_10_percent     || 0,
     radiation_photos:   detail?.radiation_photos   || 0,
     custom_fee:         detail?.custom_fee         || 0,
@@ -74,7 +74,7 @@ export default function AdminPurchases() {
     engine: '', transmission: 'automatic', fuel_type: 'petrol', doors: '', seats: '', starting_price: '',
     // cost
     bid_price: '', auction_commission: '', transportation: '', loading_custom: '',
-    commission: '', tax_10_percent: '0', radiation_photos: '0', custom_fee: '0',
+    others_commission: '', tax_10_percent: '0', radiation_photos: '0', custom_fee: '0',
     freight: '', recycle: '0', others: '0',
   }
   const [createForm, setCreateForm] = useState(BLANK_CREATE)
@@ -187,7 +187,7 @@ export default function AdminPurchases() {
         auction_commission: Number(createForm.auction_commission) || 0,
         transportation:    Number(createForm.transportation) || 0,
         loading_custom:    Number(createForm.loading_custom) || 0,
-        commission:        Number(createForm.commission) || 0,
+        others_commission: Number(createForm.others_commission) || 0,
         tax_10_percent:    Number(createForm.tax_10_percent) || 0,
         radiation_photos:  Number(createForm.radiation_photos) || 0,
         custom_fee:        Number(createForm.custom_fee) || 0,
@@ -674,7 +674,7 @@ export default function AdminPurchases() {
                 { key: 'auction_commission', label: 'Auction Commission' },
                 { key: 'transportation',     label: 'Transportation' },
                 { key: 'loading_custom',     label: 'Loading / Custom' },
-                { key: 'commission',         label: 'Commission' },
+                { key: 'others_commission',  label: 'Others Commission' },
                 { key: 'tax_10_percent',     label: 'Tax (10%)' },
                 { key: 'radiation_photos',   label: 'Radiation / Photos' },
                 { key: 'custom_fee',         label: 'Custom Fee' },
@@ -696,7 +696,7 @@ export default function AdminPurchases() {
               <span className="font-bold text-navy">Total</span>
               <span className="font-bold font-mono text-navy">
                 ¥ {fmt(
-                  ['bid_price','auction_commission','transportation','loading_custom','commission',
+                  ['bid_price','auction_commission','transportation','loading_custom','others_commission',
                    'tax_10_percent','radiation_photos','custom_fee','freight','recycle','others']
                   .reduce((s, k) => s + (Number(createForm[k]) || 0), 0)
                 )}

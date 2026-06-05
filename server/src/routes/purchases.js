@@ -156,7 +156,7 @@ router.post('/', adminAuth, async (req, res) => {
     // Insert purchase_details if cost breakdown provided
     if (bid_price) {
       await db.query(
-        `INSERT INTO purchase_details (purchase_id, bid_price, auction_commission, transportation, loading_custom, commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others)
+        `INSERT INTO purchase_details (purchase_id, bid_price, auction_commission, transportation, loading_custom, others_commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [result.insertId, bid_price, auction_commission||0, transportation||0, loading_custom||0,
          commission||0, tax_10_percent||0, radiation_photos||0, custom_fee||0, freight||0, recycle||0, others||0]
@@ -193,12 +193,12 @@ router.put('/:id', adminAuth, async (req, res) => {
     const n = (v) => Number(v) || 0;
     if (existing.length) {
       await db.query(
-        `UPDATE purchase_details SET bid_price=?,auction_commission=?,transportation=?,loading_custom=?,commission=?,tax_10_percent=?,radiation_photos=?,custom_fee=?,freight=?,recycle=?,others=? WHERE purchase_id=?`,
+        `UPDATE purchase_details SET bid_price=?,auction_commission=?,transportation=?,loading_custom=?,others_commission=?,tax_10_percent=?,radiation_photos=?,custom_fee=?,freight=?,recycle=?,others=? WHERE purchase_id=?`,
         [n(bid_price),n(auction_commission),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),req.params.id]
       );
     } else {
       await db.query(
-        `INSERT INTO purchase_details (purchase_id,bid_price,auction_commission,transportation,loading_custom,commission,tax_10_percent,radiation_photos,custom_fee,freight,recycle,others) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO purchase_details (purchase_id,bid_price,auction_commission,transportation,loading_custom,others_commission,tax_10_percent,radiation_photos,custom_fee,freight,recycle,others) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         [req.params.id,n(bid_price),n(auction_commission),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others)]
       );
     }

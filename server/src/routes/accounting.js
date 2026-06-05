@@ -13,11 +13,11 @@ const getDealerFee = async () => {
 const calcTotal = (pd, userType) => {
   const n = (v) => Number(v) || 0;
   if (userType === 'dealer') {
-    return n(pd.bid_price) + n(pd.others) + n(pd.commission);
+    return n(pd.bid_price) + n(pd.others) + n(pd.others_commission);
   }
   // ordinary: everything except tax_10_percent and recycle
   return n(pd.bid_price) + n(pd.auction_commission) + n(pd.transportation) +
-         n(pd.loading_custom) + n(pd.commission) + n(pd.radiation_photos) +
+         n(pd.loading_custom) + n(pd.others_commission) + n(pd.radiation_photos) +
          n(pd.custom_fee) + n(pd.freight) + n(pd.others);
 };
 
@@ -45,7 +45,7 @@ const buildLedger = async (userId) => {
             CONCAT('Car Purchase - ', c.make, ' ', c.model, ' ', IFNULL(c.year,''), ' (', IFNULL(c.chassis_no,''), ')') AS description,
             0 AS credit,
             pd.bid_price, pd.auction_commission, pd.transportation, pd.loading_custom,
-            pd.commission, pd.radiation_photos, pd.custom_fee, pd.freight,
+            pd.others_commission, pd.radiation_photos, pd.custom_fee, pd.freight,
             pd.others, pd.tax_10_percent, pd.recycle,
             COALESCE(p.auction_date, DATE(p.created_at)) AS entry_date,
             p.purchase_id AS source_id
@@ -61,7 +61,7 @@ const buildLedger = async (userId) => {
     debit: calcTotal(r, userType),
     bid_price:  Number(r.bid_price)  || 0,
     others:     Number(r.others)     || 0,
-    commission: Number(r.commission) || 0,
+    commission: Number(r.others_commission) || 0,
   }));
 
   // Debits — parts purchases
@@ -129,7 +129,7 @@ async function buildAccountExcel(userId) {
             c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade,
             a.auction_name,
             pd.bid_price, pd.auction_commission, pd.transportation,
-            pd.loading_custom, pd.commission, pd.tax_10_percent,
+            pd.loading_custom, pd.others_commission, pd.tax_10_percent,
             pd.radiation_photos, pd.custom_fee, pd.freight, pd.recycle, pd.others, pd.total
      FROM purchases p
      JOIN cars c ON c.car_id = p.car_id
@@ -450,7 +450,7 @@ async function buildAccountExcel(userId) {
             carNo++, fmtDate(p.auction_date), p.auction_name || '',
             p.lot_no || '', p.chassis_no || '',
             p.make || '', p.model || '', p.year || '',
-            n(p.bid_price), n(p.others), n(p.commission),
+            n(p.bid_price), n(p.others), n(p.others_commission),
             rowTotal, '', balance
           ]
         : [
@@ -458,7 +458,7 @@ async function buildAccountExcel(userId) {
             p.lot_no || '', p.chassis_no || '',
             p.make || '', p.model || '', p.year || '',
             n(p.bid_price), n(p.auction_commission),
-            n(p.transportation), n(p.loading_custom), n(p.commission),
+            n(p.transportation), n(p.loading_custom), n(p.others_commission),
             n(p.radiation_photos), n(p.custom_fee), n(p.freight),
             rowTotal, '', balance
           ];
