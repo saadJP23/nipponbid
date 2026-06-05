@@ -241,4 +241,4 @@ export const deleteJapanPurchase  = (id)             => api.delete(`/japan/purch
 export const uploadJapanDocument  = (id, formData)   => api.post(`/japan/purchases/${id}/documents`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const deleteJapanDocument  = (purchaseId, docId) => api.delete(`/japan/purchases/${purchaseId}/documents/${docId}`);
 export const downloadAccountExcel      = ()         => api.get('/japan/purchases/account-excel', { responseType: 'blob' });
-export const adminDownloadAccountExcel = (userId)   => api.get(`/japan/purchases/account-excel-admin?user_id=${userId}`, { responseType: 'blob' });
+export const adminDownloadAccountExcel = (userId) => api.get('/accounting/export', { params: { user_id: userId }, responseType: 'blob' });
