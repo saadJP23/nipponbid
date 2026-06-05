@@ -81,9 +81,7 @@ router.get('/:id', auth, async (req, res) => {
         [req.params.id]
       );
     } else {
-      // User: treat :id as the Nth purchase (1 = first, 2 = second, etc.)
-      const offset = parseInt(req.params.id) - 1;
-      if (offset < 0) return res.status(400).json({ message: 'Invalid purchase number' });
+      // User: treat :id as direct purchase_id, scoped to their account
       [rows] = await db.query(
         `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade, c.engine, c.transmission,
                 a.auction_name, a.auction_date, a.location AS auction_location,
@@ -92,10 +90,8 @@ router.get('/:id', auth, async (req, res) => {
          JOIN cars c ON c.car_id = p.car_id
          LEFT JOIN auctions a ON a.auction_id = p.auction_id
          JOIN users u ON u.user_id = p.user_id
-         WHERE p.user_id = ?
-         ORDER BY p.created_at ASC
-         LIMIT 1 OFFSET ?`,
-        [req.user.id, offset]
+         WHERE p.purchase_id = ? AND p.user_id = ?`,
+        [req.params.id, req.user.id]
       );
     }
 
