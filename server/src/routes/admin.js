@@ -307,4 +307,44 @@ router.post('/notify', adminAuth, async (req, res) => {
   }
 });
 
+// ── Settings (dealer_fee, etc.) ──────────────────────────────────────────────
+router.get('/settings', adminAuth, async (req, res) => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key_name VARCHAR(100) PRIMARY KEY,
+        value    VARCHAR(255) NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    const [rows] = await db.query('SELECT key_name, value FROM settings');
+    const obj = {};
+    rows.forEach(r => { obj[r.key_name] = r.value; });
+    if (!obj.dealer_fee) obj.dealer_fee = '100000';
+    res.json(obj);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.put('/settings', adminAuth, async (req, res) => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key_name VARCHAR(100) PRIMARY KEY,
+        value    VARCHAR(255) NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    const allowed = ['dealer_fee'];
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        await db.query(
+          'INSERT INTO settings (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?',
+          [key, String(req.body[key]), String(req.body[key])]
+        );
+      }
+    }
+    res.json({ message: 'Settings saved' });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 module.exports = router;

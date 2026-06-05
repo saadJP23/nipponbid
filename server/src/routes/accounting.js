@@ -3,7 +3,29 @@ const db      = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
 const ExcelJS = require('exceljs');
 
+const getDealerFee = async () => {
+  try {
+    const [[row]] = await db.query("SELECT value FROM settings WHERE key_name = 'dealer_fee'");
+    return row ? Number(row.value) : 100000;
+  } catch { return 100000; }
+};
+
+const calcTotal = (pd, userType, dealerFee) => {
+  const n = (v) => Number(v) || 0;
+  if (userType === 'dealer') {
+    return n(pd.bid_price) + n(pd.others) + dealerFee;
+  }
+  // ordinary: everything except tax_10_percent and recycle
+  return n(pd.bid_price) + n(pd.auction_commission) + n(pd.transportation) +
+         n(pd.loading_custom) + n(pd.commission) + n(pd.radiation_photos) +
+         n(pd.custom_fee) + n(pd.freight) + n(pd.others);
+};
+
 const buildLedger = async (userId) => {
+  const [[userRow]] = await db.query('SELECT type FROM users WHERE user_id = ?', [userId]);
+  const userType = userRow?.type || 'ordinary';
+  const dealerFee = await getDealerFee();
+
   // Credits — confirmed remittances
   const [remRows] = await db.query(
     `SELECT 'remittance' AS entry_type,
@@ -16,20 +38,28 @@ const buildLedger = async (userId) => {
     [userId]
   );
 
-  // Debits — car purchases (via purchase_details total)
+  // Debits — car purchases with full breakdown for on-the-fly total calculation
   const [purchaseRows] = await db.query(
     `SELECT 'purchase' AS entry_type,
             CONCAT('P-', p.purchase_id) AS ref,
             CONCAT('Car Purchase - ', c.make, ' ', c.model, ' ', IFNULL(c.year,''), ' (', IFNULL(c.chassis_no,''), ')') AS description,
-            0 AS credit, pd.total AS debit,
+            0 AS credit,
+            pd.bid_price, pd.auction_commission, pd.transportation, pd.loading_custom,
+            pd.commission, pd.radiation_photos, pd.custom_fee, pd.freight,
+            pd.others, pd.tax_10_percent, pd.recycle,
             COALESCE(p.auction_date, DATE(p.created_at)) AS entry_date,
             p.purchase_id AS source_id
      FROM purchases p
      JOIN cars c ON c.car_id = p.car_id
      JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
-     WHERE p.user_id = ? AND pd.total IS NOT NULL AND pd.total > 0`,
+     WHERE p.user_id = ? AND pd.bid_price IS NOT NULL AND pd.bid_price > 0`,
     [userId]
   );
+
+  const purchaseRowsMapped = purchaseRows.map(r => ({
+    ...r,
+    debit: calcTotal(r, userType, dealerFee),
+  }));
 
   // Debits — parts purchases
   const [partsRows] = await db.query(
@@ -45,7 +75,7 @@ const buildLedger = async (userId) => {
     [userId]
   );
 
-  const entries = [...remRows, ...purchaseRows, ...partsRows]
+  const entries = [...remRows, ...purchaseRowsMapped, ...partsRows]
     .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date));
 
   let balance = 0;
@@ -83,11 +113,14 @@ router.get('/user/:userId', adminAuth, async (req, res) => {
 // ── Excel Export ─────────────────────────────────────────────────────────────
 async function buildAccountExcel(userId) {
   const [[user]] = await db.query(
-    'SELECT user_id, name, email, country FROM users WHERE user_id = ?', [userId]
+    'SELECT user_id, name, email, country, type FROM users WHERE user_id = ?', [userId]
   );
+  const userType  = user?.type || 'ordinary';
+  const dealerFee = await getDealerFee();
+  const isDealer  = userType === 'dealer';
 
   // Full purchase details
-  const [purchases] = await db.query(
+  const [purchasesRaw] = await db.query(
     `SELECT p.purchase_id, p.auction_date, p.lot_no, p.destination,
             p.pro_invoice_no, p.file_code_no, p.remarks,
             c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade,
@@ -102,6 +135,12 @@ async function buildAccountExcel(userId) {
      WHERE p.user_id = ? ORDER BY COALESCE(p.auction_date, p.created_at) ASC`,
     [userId]
   );
+
+  // Override total with the correct formula for this user type
+  const purchases = purchasesRaw.map(p => ({
+    ...p,
+    computed_total: calcTotal(p, userType, dealerFee),
+  }));
 
   // Shipment details (bl_status lives in the bl table, not shipping)
   const [shipments] = await db.query(
@@ -177,37 +216,59 @@ async function buildAccountExcel(userId) {
   parts.forEach(p => allRows.push({ type: 'parts', date: p.created_at, data: p }));
   allRows.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
 
-  const totalPurchases = purchases.reduce((s, p) => s + n(p.total), 0);
+  const totalPurchases = purchases.reduce((s, p) => s + n(p.computed_total), 0);
   const totalParts = parts.reduce((s, p) => s + n(p.bid_price) + n(p.delivery_charges) + n(p.commission), 0);
   const totalBilled = totalPurchases + totalParts;
   const totalReceived = remittances.reduce((s, r) => s + n(r.deposit_amount), 0);
   const netBalance = totalReceived - totalBilled;
 
   // Merge & column widths
-  data.columns = [
-    { key: 'no',     width: 5  },
-    { key: 'date',   width: 13 },
-    { key: 'auc',    width: 20 },
-    { key: 'lot',    width: 8  },
-    { key: 'chassis',width: 17 },
-    { key: 'make',   width: 10 },
-    { key: 'model',  width: 12 },
-    { key: 'year',   width: 6  },
-    { key: 'bid',    width: 12 },
-    { key: 'aucfee', width: 10 },
-    { key: 'trans',  width: 13 },
-    { key: 'lc',     width: 12 },
-    { key: 'comm',   width: 12 },
-    { key: 'rad',    width: 12 },
-    { key: 'custom', width: 10 },
-    { key: 'freight',width: 10 },
-    { key: 'total',  width: 13 },
-    { key: 'debit',  width: 13 },
-    { key: 'balance',width: 14 },
-  ];
+  data.columns = isDealer
+    ? [
+        { key: 'no',      width: 5  },
+        { key: 'date',    width: 13 },
+        { key: 'auc',     width: 20 },
+        { key: 'lot',     width: 8  },
+        { key: 'chassis', width: 17 },
+        { key: 'make',    width: 10 },
+        { key: 'model',   width: 12 },
+        { key: 'year',    width: 6  },
+        { key: 'bid',     width: 12 },
+        { key: 'others',  width: 12 },
+        { key: 'comm',    width: 12 },
+        { key: 'total',   width: 13 },
+        { key: 'debit',   width: 13 },
+        { key: 'balance', width: 14 },
+      ]
+    : [
+        { key: 'no',     width: 5  },
+        { key: 'date',   width: 13 },
+        { key: 'auc',    width: 20 },
+        { key: 'lot',    width: 8  },
+        { key: 'chassis',width: 17 },
+        { key: 'make',   width: 10 },
+        { key: 'model',  width: 12 },
+        { key: 'year',   width: 6  },
+        { key: 'bid',    width: 12 },
+        { key: 'aucfee', width: 10 },
+        { key: 'trans',  width: 13 },
+        { key: 'lc',     width: 12 },
+        { key: 'comm',   width: 12 },
+        { key: 'rad',    width: 12 },
+        { key: 'custom', width: 10 },
+        { key: 'freight',width: 10 },
+        { key: 'total',  width: 13 },
+        { key: 'debit',  width: 13 },
+        { key: 'balance',width: 14 },
+      ];
+
+  // Column count differs by type: dealer=14, ordinary=19
+  const lastCol  = isDealer ? 'N' : 'S';
+  const midCol   = isDealer ? 'H' : 'I';
+  const midCol2  = isDealer ? 'I' : 'J';
 
   // Row 1 — Title
-  data.mergeCells('A1:S1');
+  data.mergeCells(`A1:${lastCol}1`);
   const titleCell = data.getCell('A1');
   titleCell.value = 'AUTO BID 株式会社  ·  ACCOUNT STATEMENT';
   titleCell.font  = { name: 'Arial', size: 14, bold: true, color: { argb: C.headerText } };
@@ -216,14 +277,14 @@ async function buildAccountExcel(userId) {
   data.getRow(1).height = 28;
 
   // Row 2 — Client + Date
-  data.mergeCells('A2:I2');
+  data.mergeCells(`A2:${midCol}2`);
   const clientCell = data.getCell('A2');
-  clientCell.value = `  Client: ${user.name}`;
+  clientCell.value = `  Client: ${user.name}${isDealer ? '  [DEALER]' : ''}`;
   clientCell.font  = boldFont(11, C.headerText);
   clientCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subHeaderBg } };
   clientCell.alignment = { vertical: 'middle' };
-  data.mergeCells('J2:S2');
-  const dateCell = data.getCell('J2');
+  data.mergeCells(`${midCol2}2:${lastCol}2`);
+  const dateCell = data.getCell(`${midCol2}2`);
   dateCell.value = `Statement Date: ${today}  `;
   dateCell.font  = boldFont(10, C.headerText);
   dateCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subHeaderBg } };
@@ -249,7 +310,7 @@ async function buildAccountExcel(userId) {
     lc.font  = boldFont(9, 'FF374151');
     lc.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.labelBg } };
     lc.alignment = { vertical: 'middle', indent: 1 };
-    data.mergeCells(`C${3+i}:I${3+i}`);
+    data.mergeCells(`C${3+i}:${midCol}${3+i}`);
     const vc = data.getCell(`C${3+i}`);
     vc.value = val;
     vc.font  = normFont(9);
@@ -271,38 +332,50 @@ async function buildAccountExcel(userId) {
   nbVal.numFmt     = YEN;
   nbVal.font       = boldFont(12, netBalance < 0 ? C.redText : 'FF166534');
   nbVal.alignment  = { horizontal: 'right', vertical: 'middle' };
-  data.mergeCells('E10:H10');
-  data.getCell('E10').value = `Purchases: ¥${n(totalBilled).toLocaleString()}`;
-  data.getCell('E10').font  = boldFont(9, 'FF374151');
-  data.getCell('E10').alignment = { vertical: 'middle' };
-  data.mergeCells('I10:L10');
-  data.getCell('I10').value = `Received: ¥${n(totalReceived).toLocaleString()}`;
-  data.getCell('I10').font  = boldFont(9, 'FF166534');
-  data.getCell('I10').alignment = { vertical: 'middle' };
-  data.mergeCells('M10:P10');
-  data.getCell('M10').value = `${purchases.length} Cars`;
-  data.getCell('M10').font  = boldFont(9);
-  data.mergeCells('Q10:S10');
-  data.getCell('Q10').value = `${remittances.length} Payments`;
-  data.getCell('Q10').font  = boldFont(9);
+  if (isDealer) {
+    data.mergeCells('E10:H10');
+    data.getCell('E10').value = `Purchases: ¥${n(totalBilled).toLocaleString()}  |  Dealer Fee: ¥${dealerFee.toLocaleString()}`;
+    data.getCell('E10').font  = boldFont(9, 'FF374151');
+    data.getCell('E10').alignment = { vertical: 'middle' };
+    data.mergeCells('I10:N10');
+    data.getCell('I10').value = `Received: ¥${n(totalReceived).toLocaleString()}`;
+    data.getCell('I10').font  = boldFont(9, 'FF166534');
+    data.getCell('I10').alignment = { vertical: 'middle' };
+  } else {
+    data.mergeCells('E10:H10');
+    data.getCell('E10').value = `Purchases: ¥${n(totalBilled).toLocaleString()}`;
+    data.getCell('E10').font  = boldFont(9, 'FF374151');
+    data.getCell('E10').alignment = { vertical: 'middle' };
+    data.mergeCells('I10:L10');
+    data.getCell('I10').value = `Received: ¥${n(totalReceived).toLocaleString()}`;
+    data.getCell('I10').font  = boldFont(9, 'FF166534');
+    data.getCell('I10').alignment = { vertical: 'middle' };
+    data.mergeCells('M10:P10');
+    data.getCell('M10').value = `${purchases.length} Cars`;
+    data.getCell('M10').font  = boldFont(9);
+    data.mergeCells('Q10:S10');
+    data.getCell('Q10').value = `${remittances.length} Payments`;
+    data.getCell('Q10').font  = boldFont(9);
+  }
 
   // Row 11 — Legend
-  data.mergeCells('A11:H11');
+  data.mergeCells(`A11:${midCol}11`);
   data.getCell('A11').value = '  ■ Purchase rows   ■ Payment / credit rows (green)   ■ DEBIT column = received amount only';
   data.getCell('A11').font  = normFont(8, 'FF6B7280');
-  data.mergeCells('I11:S11');
-  data.getCell('I11').value = 'See "Details" sheet for shipping, invoice & inspection data  →';
-  data.getCell('I11').font  = normFont(8, 'FF2563EB');
-  data.getCell('I11').alignment = { horizontal: 'right' };
+  data.mergeCells(`${midCol2}11:${lastCol}11`);
+  data.getCell(`${midCol2}11`).value = 'See "Details" sheet for shipping, invoice & inspection data  →';
+  data.getCell(`${midCol2}11`).font  = normFont(8, 'FF2563EB');
+  data.getCell(`${midCol2}11`).alignment = { horizontal: 'right' };
   data.getRow(11).height = 14;
 
   // Row 12 — Column headers
-  const COL_HEADERS = [
-    'NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO',
-    'MAKE','MODEL','YEAR','BID PRICE','AUCTION',
-    'TRANSPORTATION','LOADING\n/CUSTOM','COMMISSION','RADIATION\n& PHOTOS',
-    'CUSTOM','FREIGHT','TOTAL','DEBIT','BALANCE'
-  ];
+  const COL_HEADERS = isDealer
+    ? ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO','MAKE','MODEL','YEAR',
+       'BID PRICE','OTHERS','COMMISSION','TOTAL','DEBIT','BALANCE']
+    : ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO',
+       'MAKE','MODEL','YEAR','BID PRICE','AUCTION',
+       'TRANSPORTATION','LOADING\n/CUSTOM','COMMISSION','RADIATION\n& PHOTOS',
+       'CUSTOM','FREIGHT','TOTAL','DEBIT','BALANCE'];
   const hRow = data.getRow(12);
   hRow.height = 30;
   COL_HEADERS.forEach((h, i) => {
@@ -330,20 +403,19 @@ async function buildAccountExcel(userId) {
       const r = item.data;
       const amt = n(r.deposit_amount);
       balance += amt;
-      const vals = [
-        '►', fmtDate(r.tt_date || r.confirmed_at),
-        `PAYMENT RECEIVED  —  ${r.ref_no}`,
-        '', '', '', '', '', '', '', '', '', '', '', '', '', '',
-        amt, balance
-      ];
+      const totalCols = isDealer ? 14 : 19;
+      const empties = Array(totalCols - 4).fill('');
+      const vals = ['►', fmtDate(r.tt_date || r.confirmed_at), `PAYMENT RECEIVED  —  ${r.ref_no}`, ...empties, amt, balance];
+      const amtIdx = totalCols - 2;
+      const balIdx = totalCols - 1;
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = v;
         c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.paymentBg } };
-        c.font  = (i === 17) ? boldFont(9, 'FF166534')
-                : (i === 18) ? boldFont(9, balance < 0 ? C.redText : 'FF166534')
+        c.font  = (i === amtIdx) ? boldFont(9, 'FF166534')
+                : (i === balIdx) ? boldFont(9, balance < 0 ? C.redText : 'FF166534')
                 : normFont(9, 'FF166534');
-        if (i === 17 || i === 18) c.numFmt = YEN;
+        if (i === amtIdx || i === balIdx) c.numFmt = YEN;
         c.alignment = { vertical: 'middle', horizontal: i >= 8 ? 'right' : 'left' };
         c.border = allBorder();
       });
@@ -351,40 +423,54 @@ async function buildAccountExcel(userId) {
       const p = item.data;
       const total = n(p.bid_price) + n(p.delivery_charges) + n(p.commission);
       balance -= total;
-      const vals = [
-        carNo++, fmtDate(p.created_at), 'PARTS PURCHASE',
-        '', '', '', p.part_name, '', n(p.bid_price), '',
-        n(p.delivery_charges), '', n(p.commission), '', '', '',
-        total, '', balance
-      ];
+      const vals = isDealer
+        ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.commission), total, '', balance]
+        : [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', total, '', balance];
+      const balIdx = vals.length - 1;
+      const numericCols = isDealer ? [8, 10, 11, 13] : [8,9,10,11,12,13,14,15,16,18];
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = v;
         c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
-        c.font  = (i === 18) ? boldFont(9, balance < 0 ? C.redText : 'FF166534')
-                : normFont(9);
-        if ([8,9,10,11,12,13,14,15,16,18].includes(i)) c.numFmt = YEN;
+        c.font  = (i === balIdx) ? boldFont(9, balance < 0 ? C.redText : 'FF166534') : normFont(9);
+        if (numericCols.includes(i)) c.numFmt = YEN;
         c.alignment = { vertical: 'middle', horizontal: i >= 8 ? 'right' : 'left' };
         c.border = allBorder();
       });
     } else {
       const p = item.data;
-      balance -= n(p.total);
-      const vals = [
-        carNo++, fmtDate(p.auction_date), p.auction_name || '',
-        p.lot_no || '', p.chassis_no || '',
-        p.make || '', p.model || '', p.year || '',
-        n(p.bid_price), n(p.auction_commission),
-        n(p.transportation), n(p.loading_custom), n(p.commission),
-        n(p.radiation_photos), n(p.custom_fee), n(p.freight),
-        n(p.total), '', balance
-      ];
+      const rowTotal = n(p.computed_total);
+      balance -= rowTotal;
+
+      const vals = isDealer
+        ? [
+            carNo++, fmtDate(p.auction_date), p.auction_name || '',
+            p.lot_no || '', p.chassis_no || '',
+            p.make || '', p.model || '', p.year || '',
+            n(p.bid_price), n(p.others), n(p.commission),
+            rowTotal, '', balance
+          ]
+        : [
+            carNo++, fmtDate(p.auction_date), p.auction_name || '',
+            p.lot_no || '', p.chassis_no || '',
+            p.make || '', p.model || '', p.year || '',
+            n(p.bid_price), n(p.auction_commission),
+            n(p.transportation), n(p.loading_custom), n(p.commission),
+            n(p.radiation_photos), n(p.custom_fee), n(p.freight),
+            rowTotal, '', balance
+          ];
+
+      const numericCols = isDealer
+        ? [8, 9, 10, 11, 13]
+        : [8, 9, 10, 11, 12, 13, 14, 15, 16, 18];
+      const balanceIdx = isDealer ? 13 : 18;
+
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = v;
         c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
-        c.font  = (i === 18) ? boldFont(9, balance < 0 ? C.redText : 'FF166534') : normFont(9);
-        if ([8,9,10,11,12,13,14,15,16,18].includes(i)) c.numFmt = YEN;
+        c.font  = (i === balanceIdx) ? boldFont(9, balance < 0 ? C.redText : 'FF166534') : normFont(9);
+        if (numericCols.includes(i)) c.numFmt = YEN;
         c.alignment = { vertical: 'middle', horizontal: i >= 8 ? 'right' : i === 7 ? 'center' : 'left' };
         c.border = allBorder();
       });
@@ -498,12 +584,13 @@ async function buildAccountExcel(userId) {
   bill.getRow(1).height = 28;
 
   const billData = [
-    ['Customer',        user.name],
+    ['Customer',        `${user.name}${isDealer ? ' [DEALER]' : ''}`],
     ['Statement Date',  today],
     ['Total Cars',      purchases.length],
     ['Total Purchases', totalBilled],
     ['Total Payments',  totalReceived],
     ['BALANCE DUE',     netBalance],
+    ...(isDealer ? [['Dealer Fee / car', dealerFee]] : []),
   ];
   billData.forEach(([label, val], i) => {
     const r = bill.getRow(2 + i);
