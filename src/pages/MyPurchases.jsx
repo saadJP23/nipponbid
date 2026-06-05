@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { getMyPurchases, getPurchase, resolveImageUrl } from '../services/api'
 import { ShoppingBag, ChevronLeft, ChevronRight, FileText, ExternalLink } from 'lucide-react'
 import Drawer from '../components/Drawer'
+import { useAuth } from '../context/AuthContext'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -16,6 +17,8 @@ function CostRow({ label, value }) {
 }
 
 export default function MyPurchases() {
+  const { user } = useAuth()
+  const isDealer = user?.type === 'dealer'
   const [purchases, setPurchases] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -192,16 +195,22 @@ export default function MyPurchases() {
                 <p className="label">Cost Breakdown</p>
                 <div className="card p-3">
                   <CostRow label="Bid Price" value={detail.details.bid_price} />
-                  <CostRow label="Auction Commission" value={detail.details.auction_commission} />
-                  <CostRow label="Transportation" value={detail.details.transportation} />
-                  <CostRow label="Loading / Custom" value={detail.details.loading_custom} />
-                  <CostRow label="Commission" value={detail.details.commission} />
-                  <CostRow label="Tax (10%)" value={detail.details.tax_10_percent} />
-                  <CostRow label="Radiation / Photos" value={detail.details.radiation_photos} />
-                  <CostRow label="Custom Fee" value={detail.details.custom_fee} />
-                  <CostRow label="Freight" value={detail.details.freight} />
-                  <CostRow label="Recycle" value={detail.details.recycle} />
-                  {Number(detail.details.others) > 0 && <CostRow label="Others" value={detail.details.others} />}
+                  {isDealer ? (
+                    <CostRow label="Others" value={detail.details.others} />
+                  ) : (
+                    <>
+                      <CostRow label="Auction Commission" value={detail.details.auction_commission} />
+                      <CostRow label="Transportation" value={detail.details.transportation} />
+                      <CostRow label="Loading / Custom" value={detail.details.loading_custom} />
+                      <CostRow label="Commission" value={detail.details.commission} />
+                      <CostRow label="Tax (10%)" value={detail.details.tax_10_percent} />
+                      <CostRow label="Radiation / Photos" value={detail.details.radiation_photos} />
+                      <CostRow label="Custom Fee" value={detail.details.custom_fee} />
+                      <CostRow label="Freight" value={detail.details.freight} />
+                      <CostRow label="Recycle" value={detail.details.recycle} />
+                      {Number(detail.details.others) > 0 && <CostRow label="Others" value={detail.details.others} />}
+                    </>
+                  )}
                   <div className="flex justify-between pt-3 mt-1 border-t-2 border-navy">
                     <span className="font-bold text-navy">Total</span>
                     <span className="font-bold font-mono text-navy text-base">¥ {fmt(detail.details.total)}</span>
