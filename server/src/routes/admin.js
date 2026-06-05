@@ -54,6 +54,21 @@ router.get('/stats', adminAuth, async (req, res) => {
        FROM parts_purchases pp ${ppJoin} WHERE ${ppWhere.join(' AND ')}`, ppParams
     );
     const total_billed = Number(car_billed_total) + Number(parts_billed_total);
+
+    // NipponBid revenue: stored nipponbid_commission for ordinary + calculated for dealers
+    const [[{ nipponbid_revenue }]] = await db.query(
+      `SELECT COALESCE(SUM(
+         CASE WHEN u.type = 'dealer'
+           THEN COALESCE(pd.dealer_fee,0) - COALESCE(pd.auction_charges,0) - COALESCE(pd.transportation,0) - COALESCE(pd.loading_custom,0) - COALESCE(pd.others_commission,0)
+           ELSE COALESCE(pd.nipponbid_commission,0)
+         END
+       ), 0) AS nipponbid_revenue
+       FROM purchase_details pd
+       JOIN purchases p ON p.purchase_id = pd.purchase_id
+       JOIN users u ON u.user_id = p.user_id
+       WHERE ${pWhere.join(' AND ')}`, pParams
+    );
+
     const [[{ total_received }]] = await db.query(
       `SELECT COALESCE(SUM(r.deposit_amount), 0) AS total_received FROM remittances r ${remJoin} WHERE ${remWhere.join(' AND ')}`, remParams
     );
@@ -171,6 +186,7 @@ router.get('/stats', adminAuth, async (req, res) => {
         total_billed: Number(total_billed),
         total_received: Number(total_received),
         receivable_amount: Math.max(0, Number(total_billed) - Number(total_received)),
+        nipponbid_revenue: Number(nipponbid_revenue),
       },
       recent_purchases, recent_bids, monthly_billed, monthly_received,
       in_transit, customer_summary, users_list, countries_list,

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { getMyLedger, getMyPurchases, getMyBids, getAdminStats, getAdminUsers } from '../services/api'
-import { TrendingUp, ShoppingBag, Gavel, Clock, DollarSign, Users, Package, AlertCircle, Filter, X } from 'lucide-react'
+import { TrendingUp, ShoppingBag, Gavel, Clock, DollarSign, Users, Package, AlertCircle, Filter, X, BadgeDollarSign } from 'lucide-react'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -235,6 +235,7 @@ function AdminDashboard() {
         <StatCard label="Total Received" value={`¥ ${fmt(s.total_received)}`} icon={DollarSign} color="text-green" />
         <StatCard label="Receivable" value={`¥ ${fmt(s.receivable_amount)}`} icon={AlertCircle} color="text-amber" />
         <StatCard label="Proforma Unpaid" value={`¥ ${fmt(s.proforma_unpaid)}`} icon={AlertCircle} color="text-red" />
+        <StatCard label="NipponBid Revenue" value={`¥ ${fmt(s.nipponbid_revenue)}`} icon={BadgeDollarSign} color="text-green" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -198,7 +198,7 @@ export default function MyPurchases() {
                   {isDealer ? (
                     <>
                       <CostRow label="Others" value={detail.details.others} />
-                      <CostRow label="Others Commission" value={detail.details.others_commission} />
+                      <CostRow label="Commission" value={detail.details.dealer_fee} />
                     </>
                   ) : (
                     <>
@@ -218,7 +218,7 @@ export default function MyPurchases() {
                     <span className="font-bold text-navy">Total</span>
                     <span className="font-bold font-mono text-navy text-base">¥ {fmt(
                       isDealer
-                        ? Number(detail.details.bid_price || 0) + Number(detail.details.others || 0) + Number(detail.details.others_commission || 0)
+                        ? Number(detail.details.bid_price || 0) + Number(detail.details.others || 0) + Number(detail.details.dealer_fee || 0)
                         : detail.details.total
                     )}</span>
                   </div>

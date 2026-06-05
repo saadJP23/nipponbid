@@ -13,7 +13,7 @@ const getDealerFee = async () => {
 const calcTotal = (pd, userType) => {
   const n = (v) => Number(v) || 0;
   if (userType === 'dealer') {
-    return n(pd.bid_price) + n(pd.others) + n(pd.others_commission);
+    return n(pd.bid_price) + n(pd.others) + n(pd.dealer_fee);
   }
   // ordinary: everything except tax_10_percent and recycle
   return n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
@@ -46,7 +46,7 @@ const buildLedger = async (userId) => {
             0 AS credit,
             pd.bid_price, pd.auction_charges, pd.transportation, pd.loading_custom,
             pd.others_commission, pd.radiation_photos, pd.custom_fee, pd.freight,
-            pd.others, pd.tax_10_percent, pd.recycle,
+            pd.others, pd.tax_10_percent, pd.recycle, pd.dealer_fee, pd.nipponbid_commission,
             COALESCE(p.auction_date, DATE(p.created_at)) AS entry_date,
             p.purchase_id AS source_id
      FROM purchases p
@@ -61,7 +61,7 @@ const buildLedger = async (userId) => {
     debit: calcTotal(r, userType),
     bid_price:  Number(r.bid_price)  || 0,
     others:     Number(r.others)     || 0,
-    commission: Number(r.others_commission) || 0,
+    commission: userType === 'dealer' ? (Number(r.dealer_fee) || 0) : (Number(r.others_commission) || 0),
   }));
 
   // Debits — parts purchases
@@ -130,7 +130,8 @@ async function buildAccountExcel(userId) {
             a.auction_name,
             pd.bid_price, pd.auction_charges, pd.transportation,
             pd.loading_custom, pd.others_commission, pd.tax_10_percent,
-            pd.radiation_photos, pd.custom_fee, pd.freight, pd.recycle, pd.others, pd.total
+            pd.radiation_photos, pd.custom_fee, pd.freight, pd.recycle, pd.others, pd.total,
+            pd.dealer_fee, pd.nipponbid_commission
      FROM purchases p
      JOIN cars c ON c.car_id = p.car_id
      LEFT JOIN auctions a ON a.auction_id = p.auction_id
