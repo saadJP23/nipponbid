@@ -117,20 +117,11 @@ export default function AdminParts() {
                   <th>Date</th>
                   <th>User</th>
                   <th>Part Name</th>
-                  <th>Description</th>
                   <th>Platform</th>
-                  <th>Auction ID</th>
-                  <th>Qty</th>
                   <th>Bid Price</th>
-                  <th>Delivery</th>
-                  <th>Bank</th>
-                  <th>Shinchuo</th>
-                  <th>Commission</th>
                   <th>Tracking No.</th>
-                  <th>Company</th>
                   <th>Status</th>
-                  <th>Delivery Status</th>
-                  <th>Admin Note</th>
+                  <th>Delivery</th>
                 </tr></thead>
                 <tbody>
                   {parts.map(p => (
@@ -140,21 +131,15 @@ export default function AdminParts() {
                         <p className="font-medium whitespace-nowrap">{p.user_name}</p>
                         <p className="text-xs text-grey-400">{p.user_country}</p>
                       </td>
-                      <td className="font-semibold text-navy whitespace-nowrap">{p.part_name}</td>
-                      <td className="max-w-[160px] truncate text-grey-600">{p.part_description || '—'}</td>
+                      <td>
+                        <p className="font-semibold text-navy">{p.part_name}</p>
+                        <p className="text-xs text-grey-400 truncate max-w-[180px]">{p.part_description || '—'}</p>
+                      </td>
                       <td>{p.platform_name || '—'}</td>
-                      <td className="font-mono text-xs">{p.auction_id || '—'}</td>
-                      <td className="text-center">{p.quantity}</td>
-                      <td className="font-mono text-right">{p.bid_price != null ? `¥ ${fmt(p.bid_price)}` : '—'}</td>
-                      <td className="font-mono text-right">{p.delivery_charges != null ? `¥ ${fmt(p.delivery_charges)}` : '—'}</td>
-                      <td className="font-mono text-right">{p.bank_charges != null ? `¥ ${fmt(p.bank_charges)}` : '—'}</td>
-                      <td className="font-mono text-right">{p.shinchuo_commission != null ? `¥ ${fmt(p.shinchuo_commission)}` : '—'}</td>
-                      <td className="font-mono text-right">{p.commission != null ? `¥ ${fmt(p.commission)}` : '—'}</td>
+                      <td className="font-mono font-semibold">{p.bid_price != null ? `¥ ${fmt(p.bid_price)}` : '—'}</td>
                       <td className="font-mono text-xs">{p.tracking_no || '—'}</td>
-                      <td>{p.delivery_company || '—'}</td>
                       <td><span className={`badge ${STATUS_BADGE[p.status] || 'badge-grey'}`}>{p.status}</span></td>
                       <td><span className={`badge ${STATUS_BADGE[p.delivery_status] || 'badge-grey'}`}>{p.delivery_status || 'pending'}</span></td>
-                      <td className="max-w-[140px] truncate text-grey-500">{p.admin_note || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
