@@ -148,6 +148,40 @@ router.post('/', adminAuth, async (req, res) => {
   }
 });
 
+router.put('/:id', adminAuth, async (req, res) => {
+  try {
+    const { destination, pro_invoice_no, file_code_no, lot_no, remarks,
+            bid_price, auction_commission, transportation, loading_custom,
+            commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others } = req.body;
+
+    const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
+    if (!purchase.length) return res.status(404).json({ message: 'Purchase not found' });
+
+    await db.query(
+      `UPDATE purchases SET destination=?, pro_invoice_no=?, file_code_no=?, lot_no=?, remarks=? WHERE purchase_id=?`,
+      [destination||null, pro_invoice_no||null, file_code_no||null, lot_no||null, remarks||null, req.params.id]
+    );
+
+    const [existing] = await db.query('SELECT purchase_detail_id FROM purchase_details WHERE purchase_id=?', [req.params.id]);
+    const n = (v) => Number(v) || 0;
+    if (existing.length) {
+      await db.query(
+        `UPDATE purchase_details SET bid_price=?,auction_commission=?,transportation=?,loading_custom=?,commission=?,tax_10_percent=?,radiation_photos=?,custom_fee=?,freight=?,recycle=?,others=? WHERE purchase_id=?`,
+        [n(bid_price),n(auction_commission),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),req.params.id]
+      );
+    } else {
+      await db.query(
+        `INSERT INTO purchase_details (purchase_id,bid_price,auction_commission,transportation,loading_custom,commission,tax_10_percent,radiation_photos,custom_fee,freight,recycle,others) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [req.params.id,n(bid_price),n(auction_commission),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others)]
+      );
+    }
+
+    res.json({ message: 'Purchase updated' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.put('/:id/shipping', adminAuth, async (req, res) => {
   try {
     const { remarks } = req.body;

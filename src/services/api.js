@@ -66,6 +66,7 @@ export const getMyPurchases = (params) => api.get('/purchases/my', { params });
 export const getPurchase = (id) => api.get(`/purchases/${id}`);
 export const getAllPurchases = (params) => api.get('/purchases', { params });
 export const createPurchase = (data) => api.post('/purchases', data);
+export const updatePurchase = (id, data) => api.put(`/purchases/${id}`, data);
 export const updateShipping = (id, data) => api.put(`/purchases/${id}/shipping`, data);
 export const uploadDocument = (id, formData) => api.post(`/purchases/${id}/documents`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const deleteDocument = (purchaseId, docId) => api.delete(`/purchases/${purchaseId}/documents/${docId}`);

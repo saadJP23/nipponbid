@@ -1,19 +1,46 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllPurchases, getPurchase, uploadDocument, deleteDocument, resolveImageUrl } from '../../services/api'
-import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, ExternalLink, FileText } from 'lucide-react'
+import { getAllPurchases, getPurchase, updatePurchase, uploadDocument, deleteDocument, resolveImageUrl } from '../../services/api'
+import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+const n = (v) => Number(v) || 0
 
-function CostRow({ label, value }) {
-  return (
-    <div className="flex justify-between py-1.5 border-b border-grey-100 last:border-0">
-      <span className="text-sm text-grey-600">{label}</span>
-      <span className="text-sm font-mono text-navy">¥ {fmt(value)}</span>
-    </div>
-  )
+const COST_FIELDS = [
+  { key: 'bid_price',          label: 'Bid Price' },
+  { key: 'auction_commission', label: 'Auction Commission' },
+  { key: 'transportation',     label: 'Transportation' },
+  { key: 'loading_custom',     label: 'Loading / Custom' },
+  { key: 'commission',         label: 'Commission' },
+  { key: 'tax_10_percent',     label: 'Tax (10%)' },
+  { key: 'radiation_photos',   label: 'Radiation / Photos' },
+  { key: 'custom_fee',         label: 'Custom Fee' },
+  { key: 'freight',            label: 'Freight' },
+  { key: 'recycle',            label: 'Recycle' },
+  { key: 'others',             label: 'Others' },
+]
+
+function blankForm(detail, purchase) {
+  return {
+    destination:     purchase?.destination     || '',
+    pro_invoice_no:  purchase?.pro_invoice_no  || '',
+    file_code_no:    purchase?.file_code_no    || '',
+    lot_no:          purchase?.lot_no          || '',
+    remarks:         purchase?.remarks         || '',
+    bid_price:          detail?.bid_price          || 0,
+    auction_commission: detail?.auction_commission || 0,
+    transportation:     detail?.transportation     || 0,
+    loading_custom:     detail?.loading_custom     || 0,
+    commission:         detail?.commission         || 0,
+    tax_10_percent:     detail?.tax_10_percent     || 0,
+    radiation_photos:   detail?.radiation_photos   || 0,
+    custom_fee:         detail?.custom_fee         || 0,
+    freight:            detail?.freight            || 0,
+    recycle:            detail?.recycle            || 0,
+    others:             detail?.others             || 0,
+  }
 }
 
 export default function AdminPurchases() {
@@ -25,6 +52,8 @@ export default function AdminPurchases() {
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [docName, setDocName] = useState('')
   const [docFile, setDocFile] = useState(null)
@@ -45,14 +74,31 @@ export default function AdminPurchases() {
     setDetail(null)
     setDetailLoading(true)
     getPurchase(p.purchase_id)
-      .then(r => setDetail(r.data))
+      .then(r => { setDetail(r.data); setForm(blankForm(r.data.details, r.data)) })
       .catch(() => {})
       .finally(() => setDetailLoading(false))
   }
 
   const reloadDetail = () => {
     if (!selected) return
-    getPurchase(selected.purchase_id).then(r => setDetail(r.data)).catch(() => {})
+    getPurchase(selected.purchase_id)
+      .then(r => { setDetail(r.data); setForm(blankForm(r.data.details, r.data)) })
+      .catch(() => {})
+  }
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const total_cost = COST_FIELDS.reduce((sum, f) => sum + n(form[f.key]), 0)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await updatePurchase(selected.purchase_id, { ...form })
+      toast.success('Purchase updated')
+      load(page)
+      reloadDetail()
+    } catch { toast.error('Failed to save') }
+    finally { setSaving(false) }
   }
 
   const handleUpload = async (e) => {
@@ -161,12 +207,14 @@ export default function AdminPurchases() {
         onClose={() => setSelected(null)}
         title={selected ? `${selected.year} ${selected.make} ${selected.model}` : ''}
         subtitle={selected?.chassis_no}
-        width={520}
+        width={540}
       >
         {detailLoading ? (
           <div className="space-y-3">{[...Array(6)].map((_, i) => <div key={i} className="skeleton h-8 rounded" />)}</div>
         ) : detail ? (
           <div className="space-y-6">
+
+            {/* Car images */}
             {detail.images?.length > 0 && (
               <div className="grid grid-cols-3 gap-2">
                 {detail.images.slice(0, 6).map(img => (
@@ -175,14 +223,11 @@ export default function AdminPurchases() {
               </div>
             )}
 
+            {/* User info */}
             <div>
               <p className="label">User</p>
               <div className="card p-3">
-                {[
-                  ['Name', detail.user_name],
-                  ['Email', detail.user_email],
-                  ['Country', detail.user_country],
-                ].map(([k, v]) => (
+                {[['Name', detail.user_name], ['Email', detail.user_email], ['Country', detail.user_country]].map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1.5 border-b border-grey-100 last:border-0">
                     <span className="text-sm text-grey-600">{k}</span>
                     <span className="text-sm font-medium text-navy">{v}</span>
@@ -191,29 +236,65 @@ export default function AdminPurchases() {
               </div>
             </div>
 
-            {detail.details && (
-              <div>
-                <p className="label">Cost Breakdown</p>
-                <div className="card p-3">
-                  <CostRow label="Bid Price" value={detail.details.bid_price} />
-                  <CostRow label="Auction Commission" value={detail.details.auction_commission} />
-                  <CostRow label="Transportation" value={detail.details.transportation} />
-                  <CostRow label="Loading / Custom" value={detail.details.loading_custom} />
-                  <CostRow label="Commission" value={detail.details.commission} />
-                  <CostRow label="Tax (10%)" value={detail.details.tax_10_percent} />
-                  <CostRow label="Radiation / Photos" value={detail.details.radiation_photos} />
-                  <CostRow label="Custom Fee" value={detail.details.custom_fee} />
-                  <CostRow label="Freight" value={detail.details.freight} />
-                  <CostRow label="Recycle" value={detail.details.recycle} />
-                  {Number(detail.details.others) > 0 && <CostRow label="Others" value={detail.details.others} />}
-                  <div className="flex justify-between pt-3 mt-1 border-t-2 border-navy">
-                    <span className="font-bold text-navy">Total</span>
-                    <span className="font-bold font-mono text-navy text-base">¥ {fmt(detail.details.total)}</span>
+            {/* Editable purchase info */}
+            <div>
+              <p className="label">Purchase Info</p>
+              <div className="card p-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: 'pro_invoice_no', label: 'Pro-Invoice No.' },
+                    { key: 'file_code_no',   label: 'File Code No.' },
+                    { key: 'lot_no',         label: 'Lot No.' },
+                  ].map(({ key, label }) => (
+                    <div key={key}>
+                      <label className="label">{label}</label>
+                      <input className="input" value={form[key] || ''} onChange={set(key)} />
+                    </div>
+                  ))}
+                  <div className="col-span-2">
+                    <label className="label">Destination</label>
+                    <input className="input" value={form.destination || ''} onChange={set('destination')} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="label">Remarks</label>
+                    <textarea className="input" rows={2} value={form.remarks || ''} onChange={set('remarks')} />
                   </div>
                 </div>
               </div>
-            )}
+            </div>
 
+            {/* Editable cost breakdown */}
+            <div>
+              <p className="label">Cost Breakdown</p>
+              <div className="card p-3 space-y-2">
+                {COST_FIELDS.map(({ key, label }) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="text-sm text-grey-600 w-44 flex-shrink-0">{label}</span>
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
+                      <input
+                        type="number"
+                        className="input pl-7 font-mono text-right"
+                        value={form[key] ?? 0}
+                        onChange={set(key)}
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between pt-3 mt-1 border-t-2 border-navy">
+                  <span className="font-bold text-navy">Total</span>
+                  <span className="font-bold font-mono text-navy text-base">¥ {fmt(total_cost)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Save button */}
+            <button className="btn btn-primary w-full" onClick={handleSave} disabled={saving}>
+              <Save size={14} /> {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+
+            {/* Documents */}
             <div>
               <p className="label">Documents</p>
               <div className="space-y-2 mb-4">
@@ -247,9 +328,7 @@ export default function AdminPurchases() {
                     <option value="admin_only">Admin only</option>
                   </select>
                 </div>
-                <div>
-                  <input type="file" className="input text-sm" onChange={e => setDocFile(e.target.files?.[0] || null)} />
-                </div>
+                <input type="file" className="input text-sm" onChange={e => setDocFile(e.target.files?.[0] || null)} />
                 <button type="submit" className="btn btn-secondary btn-sm" disabled={uploading}>
                   <Upload size={13} /> {uploading ? 'Uploading…' : 'Upload'}
                 </button>
