@@ -3,55 +3,48 @@ const db = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
 
 const buildLedger = async (userId) => {
+  // Credits — confirmed remittances
   const [remRows] = await db.query(
-    `SELECT 'remittance' as entry_type, ref_no as ref, IFNULL(name, ref_no) as description,
-            deposit_amount as credit, 0 as debit,
-            COALESCE(tt_date, DATE(confirmed_at), created_at) as entry_date, id as source_id
+    `SELECT 'remittance' AS entry_type,
+            ref_no AS ref,
+            IFNULL(sender_name, ref_no) AS description,
+            deposit_amount AS credit, 0 AS debit,
+            COALESCE(tt_date, DATE(confirmed_at), DATE(created_at)) AS entry_date,
+            remittance_id AS source_id
      FROM remittances WHERE user_id = ? AND status = 'confirmed'`,
     [userId]
   );
 
-  const [proRows] = await db.query(
-    `SELECT 'proforma' as entry_type, invoice_no as ref, CONCAT('Proforma Invoice - ', IFNULL(sold_to, '')) as description,
-            0 as credit, amount as debit, invoice_date as entry_date, id as source_id
-     FROM proforma_invoices WHERE user_id = ?`,
+  // Debits — car purchases (via purchase_details total)
+  const [purchaseRows] = await db.query(
+    `SELECT 'purchase' AS entry_type,
+            CONCAT('P-', p.purchase_id) AS ref,
+            CONCAT('Car Purchase - ', c.make, ' ', c.model, ' ', IFNULL(c.year,''), ' (', IFNULL(c.chassis_no,''), ')') AS description,
+            0 AS credit, pd.total AS debit,
+            COALESCE(p.auction_date, DATE(p.created_at)) AS entry_date,
+            p.purchase_id AS source_id
+     FROM purchases p
+     JOIN cars c ON c.car_id = p.car_id
+     JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
+     WHERE p.user_id = ? AND pd.total IS NOT NULL AND pd.total > 0`,
     [userId]
   );
 
-  const [finRows] = await db.query(
-    `SELECT 'final' as entry_type, invoice_no as ref, CONCAT('Final Invoice', IF(file_code IS NOT NULL, CONCAT(' - ', file_code), '')) as description,
-            0 as credit, amount as debit, invoice_date as entry_date, id as source_id
-     FROM final_invoices WHERE user_id = ?`,
-    [userId]
-  );
-
-  const [shinRows] = await db.query(
-    `SELECT 'purchase' as entry_type,
-            CONCAT('JP-', p.pid) as ref,
-            CONCAT('Japan Purchase - ', c.make, ' ', c.model, ' (', c.year, ')') as description,
-            0 as credit,
-            (COALESCE(p.bid_price,0)+COALESCE(p.auction_fee,0)+COALESCE(p.transportation,0)+
-             COALESCE(p.loading_custom,0)+COALESCE(p.auction_commission,0)+COALESCE(p.commission,0)+
-             COALESCE(p.radiation_photos,0)+COALESCE(p.custom_fee,0)+COALESCE(p.freight,0)) as debit,
-            COALESCE(c.auction_date, DATE(p.created_at)) as entry_date, p.id as source_id
-     FROM japan_purchases p
-     JOIN japan_cars c ON c.pid = p.pid
-     WHERE p.user_id = ? AND p.total IS NOT NULL AND p.total > 0`,
-    [userId]
-  );
-
+  // Debits — parts purchases
   const [partsRows] = await db.query(
-    `SELECT 'parts' as entry_type,
-            CONCAT('PART-', id) as ref,
-            CONCAT('Parts Purchase - ', item) as description,
-            0 as credit, total as debit,
-            COALESCE(purchased_date, DATE(created_at)) as entry_date, id as source_id
-     FROM japan_parts_purchases
-     WHERE user_id = ? AND total IS NOT NULL AND total > 0`,
+    `SELECT 'parts' AS entry_type,
+            CONCAT('PART-', parts_purchase_id) AS ref,
+            CONCAT('Parts Purchase - ', part_name) AS description,
+            0 AS credit,
+            (COALESCE(bid_price,0) + COALESCE(delivery_charges,0) + COALESCE(commission,0)) AS debit,
+            DATE(created_at) AS entry_date,
+            parts_purchase_id AS source_id
+     FROM parts_purchases
+     WHERE user_id = ? AND bid_price IS NOT NULL AND bid_price > 0`,
     [userId]
   );
 
-  const entries = [...remRows, ...proRows, ...finRows, ...shinRows, ...partsRows]
+  const entries = [...remRows, ...purchaseRows, ...partsRows]
     .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date));
 
   let balance = 0;
@@ -79,7 +72,7 @@ router.get('/user/:userId', adminAuth, async (req, res) => {
     const totalCredit = ledger.reduce((s, r) => s + r.credit, 0);
     const totalDebit = ledger.reduce((s, r) => s + r.debit, 0);
     const balance = totalCredit - totalDebit;
-    const [[user]] = await db.query('SELECT id, name, email, country FROM users WHERE id = ?', [req.params.userId]);
+    const [[user]] = await db.query('SELECT user_id, name, email, country FROM users WHERE user_id = ?', [req.params.userId]);
     res.json({ user, ledger, totalCredit, totalDebit, balance });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -88,9 +81,9 @@ router.get('/user/:userId', adminAuth, async (req, res) => {
 
 router.get('/summary', adminAuth, async (req, res) => {
   try {
-    const [users] = await db.query("SELECT id, name, email, country FROM users WHERE role = 'user' ORDER BY name");
+    const [users] = await db.query("SELECT user_id, name, email, country FROM users WHERE role = 'user' ORDER BY name");
     const summaries = await Promise.all(users.map(async (u) => {
-      const ledger = await buildLedger(u.id);
+      const ledger = await buildLedger(u.user_id);
       const totalCredit = ledger.reduce((s, r) => s + r.credit, 0);
       const totalDebit = ledger.reduce((s, r) => s + r.debit, 0);
       return { ...u, totalCredit, totalDebit, balance: totalCredit - totalDebit };
