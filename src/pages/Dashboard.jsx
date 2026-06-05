@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getMyLedger, getMyPurchases, getMyBids, getAdminStats } from '../services/api'
-import { TrendingUp, ShoppingBag, Gavel, Clock, DollarSign, Users, Package, AlertCircle } from 'lucide-react'
+import { getMyLedger, getMyPurchases, getMyBids, getAdminStats, getAdminUsers } from '../services/api'
+import { TrendingUp, ShoppingBag, Gavel, Clock, DollarSign, Users, Package, AlertCircle, Filter, X } from 'lucide-react'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -130,14 +130,53 @@ function UserDashboard() {
 function AdminDashboard() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [users, setUsers] = useState([])
+  const [countries, setCountries] = useState([])
+  const [filters, setFilters] = useState({ user_id: '', country: '', date_from: '', date_to: '' })
+  const [applied, setApplied] = useState({})
 
   useEffect(() => {
-    getAdminStats().then(r => setStats(r.data)).catch(() => {}).finally(() => setLoading(false))
+    getAdminUsers({ limit: 200 }).then(r => {
+      const u = r.data.users || []
+      setUsers(u)
+      const unique = [...new Set(u.map(x => x.country).filter(Boolean))].sort()
+      setCountries(unique)
+    }).catch(() => {})
   }, [])
 
+  const load = useCallback((params) => {
+    setLoading(true)
+    getAdminStats(params).then(r => setStats(r.data)).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load({}) }, [load])
+
+  const setF = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.value }))
+
+  const handleApply = () => {
+    const params = {}
+    if (filters.user_id)   params.user_id   = filters.user_id
+    if (filters.country)   params.country   = filters.country
+    if (filters.date_from) params.date_from = filters.date_from
+    if (filters.date_to)   params.date_to   = filters.date_to
+    setApplied(params)
+    load(params)
+  }
+
+  const handleClear = () => {
+    setFilters({ user_id: '', country: '', date_from: '', date_to: '' })
+    setApplied({})
+    load({})
+  }
+
+  const hasFilters = Object.values(applied).some(Boolean)
+
   if (loading) return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {[...Array(8)].map((_, i) => <div key={i} className="skeleton h-24 rounded-lg" />)}
+    <div className="space-y-4">
+      <div className="skeleton h-14 rounded-lg" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[...Array(8)].map((_, i) => <div key={i} className="skeleton h-24 rounded-lg" />)}
+      </div>
     </div>
   )
 
@@ -145,6 +184,48 @@ function AdminDashboard() {
 
   return (
     <div className="space-y-6 animate-slide-up">
+
+      {/* Filter bar */}
+      <div className="card p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="label">Customer</label>
+          <select className="input min-w-[180px]" value={filters.user_id} onChange={setF('user_id')}>
+            <option value="">All Customers</option>
+            {users.filter(u => u.role !== 'admin').map(u => (
+              <option key={u.user_id} value={u.user_id}>{u.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Country</label>
+          <select className="input min-w-[150px]" value={filters.country} onChange={setF('country')}>
+            <option value="">All Countries</option>
+            {countries.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Date From</label>
+          <input className="input" type="date" value={filters.date_from} onChange={setF('date_from')} />
+        </div>
+        <div>
+          <label className="label">Date To</label>
+          <input className="input" type="date" value={filters.date_to} onChange={setF('date_to')} />
+        </div>
+        <div className="flex gap-2 pb-0.5">
+          <button className="btn btn-primary" onClick={handleApply}>
+            <Filter size={14} /> Apply
+          </button>
+          {hasFilters && (
+            <button className="btn btn-secondary" onClick={handleClear}>
+              <X size={14} /> Clear
+            </button>
+          )}
+        </div>
+        {hasFilters && (
+          <span className="badge badge-blue pb-0.5 self-end">Filtered</span>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Users" value={fmt(s.total_users)} icon={Users} />
         <StatCard label="Total Purchases" value={fmt(s.total_purchases)} icon={ShoppingBag} />
