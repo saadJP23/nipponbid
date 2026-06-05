@@ -72,6 +72,7 @@ export const uploadDocument = (id, formData) => api.post(`/purchases/${id}/docum
 export const deleteDocument = (purchaseId, docId) => api.delete(`/purchases/${purchaseId}/documents/${docId}`);
 
 export const submitPart = (data) => api.post('/parts', data);
+export const adminCreatePart = (data) => api.post('/parts/admin-create', data);
 export const getMyParts = (params) => api.get('/parts/my', { params });
 export const exportMyParts = () => api.get('/parts/my/export', { responseType: 'blob' });
 export const getAllParts = (params) => api.get('/parts', { params });

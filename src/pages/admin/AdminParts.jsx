@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllParts, updatePart, exportAllParts } from '../../services/api'
-import { Package, ChevronLeft, ChevronRight, Download, Save } from 'lucide-react'
+import { getAllParts, updatePart, exportAllParts, adminCreatePart, getAdminUsers } from '../../services/api'
+import { Package, ChevronLeft, ChevronRight, Download, Save, Plus } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 
@@ -27,7 +27,16 @@ export default function AdminParts() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
   const [editForm, setEditForm] = useState(null)
-  const [saving, setSaving]   = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [users, setUsers]       = useState([])
+  const [submitting, setSubmitting] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    user_id: '', part_name: '', part_description: '', platform_name: '', auction_id: '',
+    quantity: '1', bid_price: '', delivery_charges: '', bank_charges: '',
+    shinchuo_commission: '', commission: '', delivery_company: '',
+    tracking_no: '', delivery_status: 'pending', status: 'pending', admin_note: '',
+  })
 
   const load = useCallback((p) => {
     setLoading(true)
@@ -42,6 +51,30 @@ export default function AdminParts() {
   }, [])
 
   useEffect(() => { load(page) }, [page, load])
+
+  useEffect(() => {
+    getAdminUsers({ limit: 200 }).then(r => setUsers(r.data.users || [])).catch(() => {})
+  }, [])
+
+  const setC = (k) => (e) => setCreateForm(f => ({ ...f, [k]: e.target.value }))
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      await adminCreatePart({ ...createForm, user_id: Number(createForm.user_id) })
+      toast.success('Parts order created')
+      setShowCreate(false)
+      setCreateForm({
+        user_id: '', part_name: '', part_description: '', platform_name: '', auction_id: '',
+        quantity: '1', bid_price: '', delivery_charges: '', bank_charges: '',
+        shinchuo_commission: '', commission: '', delivery_company: '',
+        tracking_no: '', delivery_status: 'pending', status: 'pending', admin_note: '',
+      })
+      load(page)
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed') }
+    finally { setSubmitting(false) }
+  }
 
   const openPart = (p) => {
     setSelected(p)
@@ -99,6 +132,9 @@ export default function AdminParts() {
           </div>
           <button className="btn btn-secondary" onClick={handleExport} disabled={parts.length === 0}>
             <Download size={15} /> Export Excel
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={15} /> Add Manual
           </button>
         </div>
 
@@ -162,6 +198,95 @@ export default function AdminParts() {
           )}
         </div>
       </div>
+
+      {/* Create Drawer */}
+      <Drawer open={showCreate} onClose={() => setShowCreate(false)} title="Add Manual Parts Order" width={500}>
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div>
+            <label className="label">User *</label>
+            <select className="input" value={createForm.user_id} onChange={setC('user_id')} required>
+              <option value="">Select user…</option>
+              {users.filter(u => u.role !== 'admin').map(u => (
+                <option key={u.user_id} value={u.user_id}>{u.name} — {u.country}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="label">Part Name *</label>
+              <input className="input" value={createForm.part_name} onChange={setC('part_name')} required placeholder="e.g. Head Light" />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Description</label>
+              <input className="input" value={createForm.part_description} onChange={setC('part_description')} placeholder="e.g. Head Light for Honda FIT" />
+            </div>
+            <div>
+              <label className="label">Platform</label>
+              <input className="input" value={createForm.platform_name} onChange={setC('platform_name')} placeholder="e.g. Yahoo Auction" />
+            </div>
+            <div>
+              <label className="label">Auction ID</label>
+              <input className="input" value={createForm.auction_id} onChange={setC('auction_id')} />
+            </div>
+            <div>
+              <label className="label">Quantity</label>
+              <input className="input" type="number" min="1" value={createForm.quantity} onChange={setC('quantity')} />
+            </div>
+            <div>
+              <label className="label">Delivery Company</label>
+              <input className="input" value={createForm.delivery_company} onChange={setC('delivery_company')} placeholder="e.g. Yamato" />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Tracking No.</label>
+              <input className="input font-mono" value={createForm.tracking_no} onChange={setC('tracking_no')} />
+            </div>
+          </div>
+          <div className="border-t border-grey-100 pt-3">
+            <p className="text-xs font-bold text-grey-500 mb-3">Cost Breakdown</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: 'bid_price',           label: 'Bid Price' },
+                { key: 'delivery_charges',    label: 'Delivery Charges' },
+                { key: 'bank_charges',        label: 'Bank Charges' },
+                { key: 'shinchuo_commission', label: 'Shinchuo Commission' },
+                { key: 'commission',          label: 'Commission' },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <label className="label">{label}</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
+                    <input className="input pl-7 font-mono" type="number" min="0" value={createForm[key]} onChange={setC(key)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Status</label>
+              <select className="input" value={createForm.status} onChange={setC('status')}>
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Delivery Status</label>
+              <select className="input" value={createForm.delivery_status} onChange={setC('delivery_status')}>
+                {DELIVERY_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Admin Note</label>
+            <textarea className="input" rows={2} value={createForm.admin_note} onChange={setC('admin_note')} />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" className="btn btn-secondary flex-1" onClick={() => setShowCreate(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary flex-1" disabled={submitting}>
+              {submitting ? 'Creating…' : 'Create Order'}
+            </button>
+          </div>
+        </form>
+      </Drawer>
 
       <Drawer
         open={!!selected}

@@ -80,6 +80,32 @@ router.get('/my/export', auth, async (req, res) => {
   }
 });
 
+router.post('/admin-create', adminAuth, async (req, res) => {
+  try {
+    const { user_id, part_name, part_description, platform_name, auction_id, quantity,
+            bid_price, delivery_charges, bank_charges, shinchuo_commission, commission,
+            delivery_company, tracking_no, delivery_status, status, admin_note } = req.body;
+    if (!user_id || !part_name) return res.status(400).json({ message: 'user_id and part_name required' });
+    const [result] = await db.query(
+      `INSERT INTO parts_purchases
+        (user_id, part_name, part_description, platform_name, auction_id, quantity,
+         bid_price, delivery_charges, bank_charges, shinchuo_commission, commission,
+         delivery_company, tracking_no, delivery_status, status, admin_note)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [user_id, part_name, part_description||null, platform_name||null, auction_id||null,
+       quantity||1, bid_price||0, delivery_charges||0, bank_charges||0,
+       shinchuo_commission||0, commission||0, delivery_company||null,
+       tracking_no||null, delivery_status||'pending', status||'pending', admin_note||null]
+    );
+    const [part] = await db.query(
+      `SELECT p.*, u.name AS user_name, u.email AS user_email, u.country AS user_country
+       FROM parts_purchases p JOIN users u ON u.user_id = p.user_id
+       WHERE p.parts_purchase_id = ?`, [result.insertId]
+    );
+    res.status(201).json(part[0]);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 router.get('/', adminAuth, async (req, res) => {
   try {
     const { status, type, page = 1, limit = 15 } = req.query;

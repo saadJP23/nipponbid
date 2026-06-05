@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllPurchases, getPurchase, updatePurchase, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers } from '../../services/api'
-import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown } from 'lucide-react'
+import { getAllPurchases, getPurchase, updatePurchase, createPurchase, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers } from '../../services/api'
+import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown, Plus } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 
@@ -60,6 +60,15 @@ export default function AdminPurchases() {
   const [docName, setDocName] = useState('')
   const [docFile, setDocFile] = useState(null)
   const [docType, setDocType] = useState('user_and_admin')
+  const [showCreate, setShowCreate] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    user_id: '', car_id: '', auction_id: '', auction_date: '', lot_no: '',
+    destination: '', pro_invoice_no: '', file_code_no: '', remarks: '',
+    bid_price: '', auction_commission: '', transportation: '', loading_custom: '',
+    commission: '', tax_10_percent: '0', radiation_photos: '0', custom_fee: '0',
+    freight: '', recycle: '0', others: '0',
+  })
 
   useEffect(() => {
     getAdminUsers({ limit: 200 }).then(r => setUsers(r.data.users || [])).catch(() => {})
@@ -76,6 +85,36 @@ export default function AdminPurchases() {
   useEffect(() => { load(page, userFilter) }, [page, userFilter, load])
 
   const handleUserFilter = (uid) => { setUserFilter(uid); setPage(1) }
+
+  const setC = (k) => (e) => setCreateForm(f => ({ ...f, [k]: e.target.value }))
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      await createPurchase({
+        ...createForm,
+        user_id:        Number(createForm.user_id),
+        car_id:         Number(createForm.car_id),
+        auction_id:     createForm.auction_id ? Number(createForm.auction_id) : null,
+        bid_price:      Number(createForm.bid_price) || 0,
+        auction_commission: Number(createForm.auction_commission) || 0,
+        transportation: Number(createForm.transportation) || 0,
+        loading_custom: Number(createForm.loading_custom) || 0,
+        commission:     Number(createForm.commission) || 0,
+        tax_10_percent: Number(createForm.tax_10_percent) || 0,
+        radiation_photos: Number(createForm.radiation_photos) || 0,
+        custom_fee:     Number(createForm.custom_fee) || 0,
+        freight:        Number(createForm.freight) || 0,
+        recycle:        Number(createForm.recycle) || 0,
+        others:         Number(createForm.others) || 0,
+      })
+      toast.success('Purchase created')
+      setShowCreate(false)
+      load(page, userFilter)
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed') }
+    finally { setSubmitting(false) }
+  }
 
   const openDetail = (p) => {
     setSelected(p)
@@ -142,18 +181,23 @@ export default function AdminPurchases() {
             <h1 className="page-title">Purchases</h1>
             <p className="page-subtitle">{fmt(total)} total{userFilter ? ` · ${users.find(u => u.user_id === Number(userFilter))?.name}` : ''}</p>
           </div>
-          <div className="relative">
-            <select
-              className="input pr-8 appearance-none min-w-[200px]"
-              value={userFilter}
-              onChange={e => handleUserFilter(e.target.value)}
-            >
-              <option value="">All Users</option>
-              {users.map(u => (
-                <option key={u.user_id} value={u.user_id}>{u.name} ({u.country || 'N/A'})</option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-grey-400 pointer-events-none" />
+          <div className="flex gap-2 items-center">
+            <div className="relative">
+              <select
+                className="input pr-8 appearance-none min-w-[200px]"
+                value={userFilter}
+                onChange={e => handleUserFilter(e.target.value)}
+              >
+                <option value="">All Users</option>
+                {users.map(u => (
+                  <option key={u.user_id} value={u.user_id}>{u.name} ({u.country || 'N/A'})</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-grey-400 pointer-events-none" />
+            </div>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              <Plus size={15} /> Add Manual
+            </button>
           </div>
         </div>
 
@@ -357,6 +401,90 @@ export default function AdminPurchases() {
             </div>
           </div>
         ) : null}
+      </Drawer>
+
+      {/* Create Drawer */}
+      <Drawer open={showCreate} onClose={() => setShowCreate(false)} title="Add Manual Purchase" width={540}>
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">User *</label>
+              <select className="input" value={createForm.user_id} onChange={setC('user_id')} required>
+                <option value="">Select user…</option>
+                {users.filter(u => u.role !== 'admin').map(u => (
+                  <option key={u.user_id} value={u.user_id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Car ID *</label>
+              <input className="input font-mono" type="number" value={createForm.car_id} onChange={setC('car_id')} required placeholder="e.g. 42" />
+            </div>
+            <div>
+              <label className="label">Auction ID</label>
+              <input className="input font-mono" type="number" value={createForm.auction_id} onChange={setC('auction_id')} placeholder="Optional" />
+            </div>
+            <div>
+              <label className="label">Auction Date</label>
+              <input className="input" type="date" value={createForm.auction_date} onChange={setC('auction_date')} />
+            </div>
+            <div>
+              <label className="label">Pro-Invoice No.</label>
+              <input className="input" value={createForm.pro_invoice_no} onChange={setC('pro_invoice_no')} placeholder="e.g. ERD-1" />
+            </div>
+            <div>
+              <label className="label">File Code No.</label>
+              <input className="input" value={createForm.file_code_no} onChange={setC('file_code_no')} />
+            </div>
+            <div>
+              <label className="label">Lot No.</label>
+              <input className="input" value={createForm.lot_no} onChange={setC('lot_no')} />
+            </div>
+            <div>
+              <label className="label">Destination</label>
+              <input className="input" value={createForm.destination} onChange={setC('destination')} placeholder="e.g. Birmingham, England" />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Remarks</label>
+              <textarea className="input" rows={2} value={createForm.remarks} onChange={setC('remarks')} />
+            </div>
+          </div>
+
+          <div className="border-t border-grey-100 pt-3">
+            <p className="text-xs font-bold text-grey-500 mb-3">Cost Breakdown</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: 'bid_price',          label: 'Bid Price' },
+                { key: 'auction_commission', label: 'Auction Commission' },
+                { key: 'transportation',     label: 'Transportation' },
+                { key: 'loading_custom',     label: 'Loading / Custom' },
+                { key: 'commission',         label: 'Commission' },
+                { key: 'tax_10_percent',     label: 'Tax (10%)' },
+                { key: 'radiation_photos',   label: 'Radiation / Photos' },
+                { key: 'custom_fee',         label: 'Custom Fee' },
+                { key: 'freight',            label: 'Freight' },
+                { key: 'recycle',            label: 'Recycle' },
+                { key: 'others',             label: 'Others' },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <label className="label">{label}</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
+                    <input className="input pl-7 font-mono" type="number" min="0"
+                      value={createForm[key]} onChange={setC(key)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" className="btn btn-secondary flex-1" onClick={() => setShowCreate(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary flex-1" disabled={submitting}>
+              {submitting ? 'Creating…' : 'Create Purchase'}
+            </button>
+          </div>
+        </form>
       </Drawer>
     </>
   )
