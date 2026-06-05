@@ -10,10 +10,10 @@ const getDealerFee = async () => {
   } catch { return 100000; }
 };
 
-const calcTotal = (pd, userType, dealerFee) => {
+const calcTotal = (pd, userType) => {
   const n = (v) => Number(v) || 0;
   if (userType === 'dealer') {
-    return n(pd.bid_price) + n(pd.others) + dealerFee;
+    return n(pd.bid_price) + n(pd.others) + n(pd.commission);
   }
   // ordinary: everything except tax_10_percent and recycle
   return n(pd.bid_price) + n(pd.auction_commission) + n(pd.transportation) +
@@ -58,7 +58,7 @@ const buildLedger = async (userId) => {
 
   const purchaseRowsMapped = purchaseRows.map(r => ({
     ...r,
-    debit: calcTotal(r, userType, dealerFee),
+    debit: calcTotal(r, userType),
     bid_price:  Number(r.bid_price)  || 0,
     others:     Number(r.others)     || 0,
     commission: Number(r.commission) || 0,
@@ -142,7 +142,7 @@ async function buildAccountExcel(userId) {
   // Override total with the correct formula for this user type
   const purchases = purchasesRaw.map(p => ({
     ...p,
-    computed_total: calcTotal(p, userType, dealerFee),
+    computed_total: calcTotal(p, userType),
   }));
 
   // Shipment details (bl_status lives in the bl table, not shipping)
