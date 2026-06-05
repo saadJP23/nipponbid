@@ -15,10 +15,10 @@ const calcTotal = (pd, userType) => {
   if (userType === 'dealer') {
     return n(pd.bid_price) + n(pd.others) + n(pd.dealer_fee);
   }
-  // ordinary: everything except tax_10_percent and recycle
+  // ordinary: bid + auction_charges + transportation + loading_custom + others_commission + radiation_photos + custom_fee
   return n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
          n(pd.loading_custom) + n(pd.others_commission) + n(pd.radiation_photos) +
-         n(pd.custom_fee) + n(pd.freight) + n(pd.others);
+         n(pd.custom_fee);
 };
 
 const buildLedger = async (userId) => {

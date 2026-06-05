@@ -703,7 +703,7 @@ export default function AdminPurchases() {
               <span className="font-bold font-mono text-navy">
                 ¥ {fmt(
                   ['bid_price','auction_charges','transportation','loading_custom','others_commission',
-                   'tax_10_percent','radiation_photos','custom_fee','freight','recycle','others','dealer_fee','nipponbid_commission']
+                   'radiation_photos','custom_fee']
                   .reduce((s, k) => s + (Number(createForm[k]) || 0), 0)
                 )}
               </span>
