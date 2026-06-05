@@ -34,22 +34,46 @@ router.get('/my', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const [rows] = await db.query(
-      `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade, c.engine, c.transmission,
-              a.auction_name, a.auction_date, a.location AS auction_location,
-              u.name AS user_name, u.email AS user_email, u.country AS user_country, u.contact_number AS user_phone
-       FROM purchases p
-       JOIN cars c ON c.car_id = p.car_id
-       LEFT JOIN auctions a ON a.auction_id = p.auction_id
-       JOIN users u ON u.user_id = p.user_id
-       WHERE p.purchase_id = ? ${req.user.role !== 'admin' ? 'AND p.user_id = ?' : ''}`,
-      req.user.role !== 'admin' ? [req.params.id, req.user.id] : [req.params.id]
-    );
+    let rows;
+
+    if (req.user.role === 'admin') {
+      // Admin: treat :id as direct purchase_id
+      [rows] = await db.query(
+        `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade, c.engine, c.transmission,
+                a.auction_name, a.auction_date, a.location AS auction_location,
+                u.name AS user_name, u.email AS user_email, u.country AS user_country, u.contact_number AS user_phone
+         FROM purchases p
+         JOIN cars c ON c.car_id = p.car_id
+         LEFT JOIN auctions a ON a.auction_id = p.auction_id
+         JOIN users u ON u.user_id = p.user_id
+         WHERE p.purchase_id = ?`,
+        [req.params.id]
+      );
+    } else {
+      // User: treat :id as the Nth purchase (1 = first, 2 = second, etc.)
+      const offset = parseInt(req.params.id) - 1;
+      if (offset < 0) return res.status(400).json({ message: 'Invalid purchase number' });
+      [rows] = await db.query(
+        `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade, c.engine, c.transmission,
+                a.auction_name, a.auction_date, a.location AS auction_location,
+                u.name AS user_name, u.email AS user_email, u.country AS user_country, u.contact_number AS user_phone
+         FROM purchases p
+         JOIN cars c ON c.car_id = p.car_id
+         LEFT JOIN auctions a ON a.auction_id = p.auction_id
+         JOIN users u ON u.user_id = p.user_id
+         WHERE p.user_id = ?
+         ORDER BY p.created_at ASC
+         LIMIT 1 OFFSET ?`,
+        [req.user.id, offset]
+      );
+    }
+
     if (!rows.length) return res.status(404).json({ message: 'Purchase not found' });
 
+    const purchaseId = rows[0].purchase_id;
     const [images]    = await db.query('SELECT * FROM car_images WHERE car_id = ? ORDER BY is_primary DESC', [rows[0].car_id]);
-    const [documents] = await db.query('SELECT * FROM documents WHERE purchase_id = ? ORDER BY created_at DESC', [req.params.id]);
-    const [details]   = await db.query('SELECT * FROM purchase_details WHERE purchase_id = ?', [req.params.id]);
+    const [documents] = await db.query('SELECT * FROM documents WHERE purchase_id = ? ORDER BY created_at DESC', [purchaseId]);
+    const [details]   = await db.query('SELECT * FROM purchase_details WHERE purchase_id = ?', [purchaseId]);
 
     res.json({ ...rows[0], images, documents, details: details[0] || null });
   } catch (err) {
