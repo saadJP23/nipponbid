@@ -16,7 +16,7 @@ const calcTotal = (pd, userType) => {
     return n(pd.bid_price) + n(pd.others) + n(pd.others_commission);
   }
   // ordinary: everything except tax_10_percent and recycle
-  return n(pd.bid_price) + n(pd.auction_commission) + n(pd.transportation) +
+  return n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
          n(pd.loading_custom) + n(pd.others_commission) + n(pd.radiation_photos) +
          n(pd.custom_fee) + n(pd.freight) + n(pd.others);
 };
@@ -44,7 +44,7 @@ const buildLedger = async (userId) => {
             CONCAT('P-', p.purchase_id) AS ref,
             CONCAT('Car Purchase - ', c.make, ' ', c.model, ' ', IFNULL(c.year,''), ' (', IFNULL(c.chassis_no,''), ')') AS description,
             0 AS credit,
-            pd.bid_price, pd.auction_commission, pd.transportation, pd.loading_custom,
+            pd.bid_price, pd.auction_charges, pd.transportation, pd.loading_custom,
             pd.others_commission, pd.radiation_photos, pd.custom_fee, pd.freight,
             pd.others, pd.tax_10_percent, pd.recycle,
             COALESCE(p.auction_date, DATE(p.created_at)) AS entry_date,
@@ -128,7 +128,7 @@ async function buildAccountExcel(userId) {
             p.pro_invoice_no, p.file_code_no, p.remarks,
             c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade,
             a.auction_name,
-            pd.bid_price, pd.auction_commission, pd.transportation,
+            pd.bid_price, pd.auction_charges, pd.transportation,
             pd.loading_custom, pd.others_commission, pd.tax_10_percent,
             pd.radiation_photos, pd.custom_fee, pd.freight, pd.recycle, pd.others, pd.total
      FROM purchases p
@@ -457,7 +457,7 @@ async function buildAccountExcel(userId) {
             carNo++, fmtDate(p.auction_date), p.auction_name || '',
             p.lot_no || '', p.chassis_no || '',
             p.make || '', p.model || '', p.year || '',
-            n(p.bid_price), n(p.auction_commission),
+            n(p.bid_price), n(p.auction_charges),
             n(p.transportation), n(p.loading_custom), n(p.others_commission),
             n(p.radiation_photos), n(p.custom_fee), n(p.freight),
             rowTotal, '', balance
@@ -539,7 +539,7 @@ async function buildAccountExcel(userId) {
       i + 1, fmtDate(p.auction_date), p.auction_name || '',
       p.lot_no || '', p.chassis_no || '',
       p.destination || '', p.pro_invoice_no || '', p.file_code_no || '',
-      n(p.auction_commission),
+      n(p.auction_charges),
       fmtDate(ship.etd), ship.ship_name || '',
       fmtDate(ship.eta), ship.route || '',
       ship.result_of_inspection || '', p.remarks || '',
@@ -566,7 +566,7 @@ async function buildAccountExcel(userId) {
   gtLabel.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.headerBg } };
   gtLabel.alignment = { horizontal: 'center', vertical: 'middle' };
   const gtVal = gtRow.getCell(9);
-  gtVal.value  = purchases.reduce((s, p) => s + n(p.auction_commission), 0);
+  gtVal.value  = purchases.reduce((s, p) => s + n(p.auction_charges), 0);
   gtVal.numFmt = YEN;
   gtVal.font   = boldFont(10, C.headerText);
   gtVal.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.headerBg } };

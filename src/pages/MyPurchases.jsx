@@ -202,7 +202,7 @@ export default function MyPurchases() {
                     </>
                   ) : (
                     <>
-                      <CostRow label="Auction Commission" value={detail.details.auction_commission} />
+                      <CostRow label="Auction Charges" value={detail.details.auction_charges} />
                       <CostRow label="Transportation" value={detail.details.transportation} />
                       <CostRow label="Loading / Custom" value={detail.details.loading_custom} />
                       <CostRow label="Others Commission" value={detail.details.others_commission} />

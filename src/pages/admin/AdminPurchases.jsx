@@ -10,7 +10,7 @@ const n = (v) => Number(v) || 0
 
 const COST_FIELDS = [
   { key: 'bid_price',          label: 'Bid Price' },
-  { key: 'auction_commission', label: 'Auction Commission' },
+  { key: 'auction_charges', label: 'Auction Charges' },
   { key: 'transportation',     label: 'Transportation' },
   { key: 'loading_custom',     label: 'Loading / Custom' },
   { key: 'others_commission',  label: 'Others Commission' },
@@ -30,7 +30,7 @@ function blankForm(detail, purchase) {
     lot_no:          purchase?.lot_no          || '',
     remarks:         purchase?.remarks         || '',
     bid_price:          detail?.bid_price          || 0,
-    auction_commission: detail?.auction_commission || 0,
+    auction_charges: detail?.auction_charges || 0,
     transportation:     detail?.transportation     || 0,
     loading_custom:     detail?.loading_custom     || 0,
     others_commission:  detail?.others_commission  || 0,
@@ -73,7 +73,7 @@ export default function AdminPurchases() {
     make: '', model: '', year: '', chassis_no: '', color: '', mileage: '', grade: '',
     engine: '', transmission: 'automatic', fuel_type: 'petrol', doors: '', seats: '', starting_price: '',
     // cost
-    bid_price: '', auction_commission: '', transportation: '', loading_custom: '',
+    bid_price: '', auction_charges: '', transportation: '', loading_custom: '',
     others_commission: '', tax_10_percent: '0', radiation_photos: '0', custom_fee: '0',
     freight: '', recycle: '0', others: '0',
   }
@@ -184,7 +184,7 @@ export default function AdminPurchases() {
         file_code_no:   createForm.file_code_no || null,
         remarks:        createForm.remarks || null,
         bid_price:         Number(createForm.bid_price) || 0,
-        auction_commission: Number(createForm.auction_commission) || 0,
+        auction_charges: Number(createForm.auction_charges) || 0,
         transportation:    Number(createForm.transportation) || 0,
         loading_custom:    Number(createForm.loading_custom) || 0,
         others_commission: Number(createForm.others_commission) || 0,
@@ -671,7 +671,7 @@ export default function AdminPurchases() {
             <div className="grid grid-cols-2 gap-3">
               {[
                 { key: 'bid_price',          label: 'Bid Price' },
-                { key: 'auction_commission', label: 'Auction Commission' },
+                { key: 'auction_charges', label: 'Auction Charges' },
                 { key: 'transportation',     label: 'Transportation' },
                 { key: 'loading_custom',     label: 'Loading / Custom' },
                 { key: 'others_commission',  label: 'Others Commission' },
@@ -696,7 +696,7 @@ export default function AdminPurchases() {
               <span className="font-bold text-navy">Total</span>
               <span className="font-bold font-mono text-navy">
                 ¥ {fmt(
-                  ['bid_price','auction_commission','transportation','loading_custom','others_commission',
+                  ['bid_price','auction_charges','transportation','loading_custom','others_commission',
                    'tax_10_percent','radiation_photos','custom_fee','freight','recycle','others']
                   .reduce((s, k) => s + (Number(createForm[k]) || 0), 0)
                 )}
