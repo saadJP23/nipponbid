@@ -95,6 +95,16 @@ router.put('/:id', adminAuth, async (req, res) => {
   }
 });
 
+// ── Admin: delete shipment ────────────────────────────────────────────────────
+router.delete('/:id', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM shipping WHERE shipping_id = ?', [req.params.id]);
+    res.json({ message: 'Shipment deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── BL routes ─────────────────────────────────────────────────────────────────
 router.get('/bl-requests', adminAuth, async (req, res) => {
   try {
@@ -181,6 +191,15 @@ router.post('/bl-requests/:id/document', adminAuth, uploadDocument.single('file'
     const [doc] = await db.query('SELECT * FROM documents WHERE document_id = ?', [result.insertId]);
     res.status(201).json(doc[0]);
   } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.delete('/bl-requests/:id', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM bl WHERE bl_id = ?', [req.params.id]);
+    res.json({ message: 'BL record deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 router.delete('/bl-requests/:id/document', adminAuth, async (req, res) => {
