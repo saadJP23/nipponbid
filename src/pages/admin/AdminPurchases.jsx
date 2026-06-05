@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllPurchases, getPurchase, updatePurchase, uploadDocument, deleteDocument, resolveImageUrl } from '../../services/api'
-import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save } from 'lucide-react'
+import { getAllPurchases, getPurchase, updatePurchase, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers } from '../../services/api'
+import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 
@@ -49,6 +49,8 @@ export default function AdminPurchases() {
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [userFilter, setUserFilter] = useState('')
+  const [users, setUsers] = useState([])
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -59,15 +61,21 @@ export default function AdminPurchases() {
   const [docFile, setDocFile] = useState(null)
   const [docType, setDocType] = useState('user_and_admin')
 
-  const load = useCallback((p) => {
+  useEffect(() => {
+    getAdminUsers({ limit: 200 }).then(r => setUsers(r.data.users || [])).catch(() => {})
+  }, [])
+
+  const load = useCallback((p, uid) => {
     setLoading(true)
-    getAllPurchases({ page: p, limit: 15 })
+    getAllPurchases({ page: p, limit: 15, ...(uid ? { user_id: uid } : {}) })
       .then(r => { setPurchases(r.data.purchases || []); setTotal(r.data.total || 0); setPages(r.data.pages || 1) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { load(page) }, [page, load])
+  useEffect(() => { load(page, userFilter) }, [page, userFilter, load])
+
+  const handleUserFilter = (uid) => { setUserFilter(uid); setPage(1) }
 
   const openDetail = (p) => {
     setSelected(p)
@@ -132,7 +140,20 @@ export default function AdminPurchases() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Purchases</h1>
-            <p className="page-subtitle">{fmt(total)} total</p>
+            <p className="page-subtitle">{fmt(total)} total{userFilter ? ` · ${users.find(u => u.user_id === Number(userFilter))?.name}` : ''}</p>
+          </div>
+          <div className="relative">
+            <select
+              className="input pr-8 appearance-none min-w-[200px]"
+              value={userFilter}
+              onChange={e => handleUserFilter(e.target.value)}
+            >
+              <option value="">All Users</option>
+              {users.map(u => (
+                <option key={u.user_id} value={u.user_id}>{u.name} ({u.country || 'N/A'})</option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-grey-400 pointer-events-none" />
           </div>
         </div>
 
