@@ -3,6 +3,8 @@ const db      = require('../config/database');
 const { auth, adminAuth } = require('../middleware/auth');
 const ExcelJS = require('exceljs');
 
+const intVal = (v) => typeof v === 'number' ? Math.round(v) : v;
+
 const getDealerFee = async () => {
   try {
     const [[row]] = await db.query("SELECT value FROM settings WHERE key_name = 'dealer_fee'");
@@ -190,8 +192,6 @@ async function buildAccountExcel(userId) {
     return `${day}-${mon}-${yr}`;
   };
   const n = (v) => Math.round(Number(v) || 0);
-  // Force any numeric cell value to a strict integer before writing to Excel
-  const intVal = (v) => typeof v === 'number' ? Math.round(v) : v;
   const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
 
   const wb = new ExcelJS.Workbook();
