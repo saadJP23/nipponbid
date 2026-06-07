@@ -526,7 +526,7 @@ async function buildAccountExcel(userId, adminView = false) {
             p.lot_no || '', p.chassis_no || '',
             p.make || '', p.model || '', p.year || '',
             n(p.bid_price), n(p.auction_charges),
-            n(p.transportation), n(p.loading_custom), n(p.others_commission),
+            n(p.transportation), n(p.loading_custom), n(p.nipponbid_commission),
             n(p.radiation_photos), n(p.custom_fee), n(p.freight),
             n(p.tax_10_percent), n(p.recycle), n(p.dealer_fee),
             rowTotal, '', balance
