@@ -190,6 +190,8 @@ async function buildAccountExcel(userId) {
     return `${day}-${mon}-${yr}`;
   };
   const n = (v) => Math.round(Number(v) || 0);
+  // Force any numeric cell value to a strict integer before writing to Excel
+  const intVal = (v) => typeof v === 'number' ? Math.round(v) : v;
   const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
 
   const wb = new ExcelJS.Workbook();
@@ -422,7 +424,7 @@ async function buildAccountExcel(userId) {
       const balIdx = totalCols - 1;
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
-        c.value = v;
+        c.value = intVal(v);
         c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.paymentBg } };
         c.font  = (i === amtIdx) ? boldFont(9, 'FF166534')
                 : (i === balIdx) ? boldFont(9, balance < 0 ? C.redText : 'FF166534')
@@ -442,7 +444,7 @@ async function buildAccountExcel(userId) {
       const numericCols = isDealer ? [8, 10, 11, 13] : [8,9,10,11,12,13,14,15,16,18];
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
-        c.value = v;
+        c.value = intVal(v);
         c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
         c.font  = (i === balIdx) ? boldFont(9, balance < 0 ? C.redText : 'FF166534') : normFont(9);
         if (numericCols.includes(i)) c.numFmt = YEN;
@@ -479,7 +481,7 @@ async function buildAccountExcel(userId) {
 
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
-        c.value = v;
+        c.value = intVal(v);
         c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
         c.font  = (i === balanceIdx) ? boldFont(9, balance < 0 ? C.redText : 'FF166534') : normFont(9);
         if (numericCols.includes(i)) c.numFmt = YEN;
@@ -556,7 +558,7 @@ async function buildAccountExcel(userId) {
     ];
     vals.forEach((v, j) => {
       const c = dRow.getCell(j + 1);
-      c.value = v;
+      c.value = intVal(v);
       c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
       c.font  = normFont(9);
       if (j === 8) c.numFmt = YEN;
@@ -739,7 +741,7 @@ router.get('/export-all', adminAuth, async (req, res) => {
       const vals = [r.name, r.country || '—', r.totalDebit, r.totalCredit, r.balance];
       vals.forEach((v, j) => {
         const c = row.getCell(j + 1);
-        c.value = v;
+        c.value = intVal(v);
         c.font  = j === 4 ? boldFont(10, v < 0 ? C.redText : 'FF166534') : normFont(10);
         if (j >= 2) c.numFmt = YEN;
         c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: bg } };
@@ -753,7 +755,7 @@ router.get('/export-all', adminAuth, async (req, res) => {
     gtRow.height = 22;
     ['TOTAL', '', grandBilled, grandReceived, grandReceived - grandBilled].forEach((v, i) => {
       const c = gtRow.getCell(i + 1);
-      c.value = v;
+      c.value = intVal(v);
       c.font  = boldFont(10, i === 4 ? ((grandReceived - grandBilled) < 0 ? C.redText : 'FF166534') : C.headerText);
       if (i >= 2) c.numFmt = YEN;
       c.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:C.headerBg } };
