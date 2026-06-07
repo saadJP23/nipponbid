@@ -123,13 +123,15 @@ router.get('/user/:userId', adminAuth, async (req, res) => {
 });
 
 // ── Excel Export ─────────────────────────────────────────────────────────────
-async function buildAccountExcel(userId) {
+async function buildAccountExcel(userId, adminView = false) {
   const [[user]] = await db.query(
     'SELECT user_id, name, email, country, type FROM users WHERE user_id = ?', [userId]
   );
   const userType  = user?.type || 'ordinary';
   const dealerFee = await getDealerFee();
-  const isDealer  = userType === 'dealer';
+  // In admin view, dealers get the full ordinary breakdown so admin sees all cost fields.
+  // In user's own view, dealers see their simplified layout.
+  const isDealer  = userType === 'dealer' && !adminView;
 
   // Full purchase details
   const [purchasesRaw] = await db.query(
@@ -660,11 +662,23 @@ async function buildAccountExcel(userId) {
   return wb;
 }
 
+router.get('/export/my', auth, async (req, res) => {
+  try {
+    const wb = await buildAccountExcel(req.user.id, false);
+    const [[user]] = await db.query('SELECT name FROM users WHERE user_id = ?', [req.user.id]);
+    const fname = `account-${(user?.name || 'export').replace(/\s+/g, '-')}-${Date.now()}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 router.get('/export', adminAuth, async (req, res) => {
   try {
     const { user_id } = req.query;
     if (!user_id) return res.status(400).json({ message: 'user_id required' });
-    const wb = await buildAccountExcel(user_id);
+    const wb = await buildAccountExcel(user_id, true);
     const [[user]] = await db.query('SELECT name FROM users WHERE user_id = ?', [user_id]);
     const fname = `account-${(user?.name || 'export').replace(/\s+/g, '-')}-${Date.now()}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -737,7 +751,7 @@ router.get('/export-all', adminAuth, async (req, res) => {
       summaryRows.push({ ...u, totalDebit, totalCredit, balance });
 
       // Build per-user workbook and copy sheets into combined wb
-      const userWb = await buildAccountExcel(u.user_id);
+      const userWb = await buildAccountExcel(u.user_id, true);
       for (const wsName of userWb.worksheets.map(w => w.name)) {
         const srcWs  = userWb.getWorksheet(wsName);
         const label  = `${u.name.replace(/[^a-zA-Z0-9 ]/g,'').slice(0,20)} - ${wsName}`;
