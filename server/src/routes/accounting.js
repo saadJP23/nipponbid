@@ -249,6 +249,7 @@ async function buildAccountExcel(userId) {
         { key: 'bid',     width: 12 },
         { key: 'others',  width: 12 },
         { key: 'comm',    width: 12 },
+        { key: 'total',   width: 13 },
         { key: 'debit',   width: 13 },
         { key: 'balance', width: 14 },
       ]
@@ -269,12 +270,13 @@ async function buildAccountExcel(userId) {
         { key: 'rad',    width: 12 },
         { key: 'custom', width: 10 },
         { key: 'freight',width: 10 },
+        { key: 'total',  width: 13 },
         { key: 'debit',  width: 13 },
         { key: 'balance',width: 14 },
       ];
 
-  // Column count differs by type: dealer=13, ordinary=18
-  const lastCol  = isDealer ? 'M' : 'R';
+  // Column count differs by type: dealer=14, ordinary=19
+  const lastCol  = isDealer ? 'N' : 'S';
   const midCol   = isDealer ? 'H' : 'I';
   const midCol2  = isDealer ? 'I' : 'J';
 
@@ -382,11 +384,11 @@ async function buildAccountExcel(userId) {
   // Row 12 — Column headers
   const COL_HEADERS = isDealer
     ? ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO','MAKE','MODEL','YEAR',
-       'BID PRICE','OTHERS','COMMISSION','DEBIT','BALANCE']
+       'BID PRICE','OTHERS','COMMISSION','TOTAL','DEBIT','BALANCE']
     : ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO',
        'MAKE','MODEL','YEAR','BID PRICE','AUCTION',
        'TRANSPORTATION','LOADING\n/CUSTOM','COMMISSION','RADIATION\n& PHOTOS',
-       'CUSTOM','FREIGHT','DEBIT','BALANCE'];
+       'CUSTOM','FREIGHT','TOTAL','DEBIT','BALANCE'];
   const hRow = data.getRow(12);
   hRow.height = 30;
   COL_HEADERS.forEach((h, i) => {
@@ -404,6 +406,30 @@ async function buildAccountExcel(userId) {
   let balance = 0;
   const addInt = (a, b) => Math.round(a + b);
 
+  // Column letters: ordinary Q=TOTAL, R=DEBIT, S=BALANCE; dealer L=TOTAL, M=DEBIT, N=BALANCE
+  const totCol    = isDealer ? 'L' : 'Q';
+  const debCol    = isDealer ? 'M' : 'R';
+  const balCol    = isDealer ? 'N' : 'S';
+  const balColNum = isDealer ? 14 : 19;
+  const FIRST_ROW = 13;
+
+  const totColNum = isDealer ? 12 : 17;
+
+  const writeTotCell = (row, total) => {
+    const cell = row.getCell(totColNum);
+    cell.value  = total;
+    cell.numFmt = YEN;
+    cell.font   = normFont(9);
+    cell.alignment = { vertical: 'middle', horizontal: 'right' };
+    cell.border = allBorder();
+  };
+
+  const writeBalFormula = (row, rowNum, computedBal) => {
+    const prevRef = rowNum === FIRST_ROW ? '0' : `${balCol}${rowNum - 1}`;
+    const cell = row.getCell(balColNum);
+    cell.value = { formula: `=${prevRef}-(${totCol}${rowNum}-${debCol}${rowNum})`, result: computedBal };
+  };
+
   for (const item of allRows) {
     const row = data.getRow(rowIdx);
     row.height = 16;
@@ -415,11 +441,12 @@ async function buildAccountExcel(userId) {
       const r = item.data;
       const amt = n(r.deposit_amount);
       balance = addInt(balance, amt);
-      const totalCols = isDealer ? 13 : 18;
-      const empties = Array(totalCols - 4).fill('');
+      // dealer: 14 cols (TOTAL=col13, DEBIT=col13, BALANCE=col14)
+      // ordinary: 19 cols (TOTAL=col17, DEBIT=col18, BALANCE=col19)
+      const amtIdx = isDealer ? 12 : 17;
+      const balIdx = isDealer ? 13 : 18;
+      const empties = Array(amtIdx - 3).fill('');
       const vals = ['►', fmtDate(r.tt_date || r.confirmed_at), `PAYMENT RECEIVED  —  ${r.ref_no}`, ...empties, amt, balance];
-      const amtIdx = totalCols - 2;
-      const balIdx = totalCols - 1;
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = intVal(v);
@@ -431,15 +458,16 @@ async function buildAccountExcel(userId) {
         c.alignment = { vertical: 'middle', horizontal: i >= 8 ? 'right' : 'left' };
         c.border = allBorder();
       });
+      writeBalFormula(row, rowIdx, balance);
     } else if (isPart) {
       const p = item.data;
       const total = n(p.bid_price) + n(p.delivery_charges) + n(p.commission);
       balance = addInt(balance, -total);
       const vals = isDealer
-        ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.commission), total, balance]
-        : [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', total, balance];
+        ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.commission), total, '', balance]
+        : [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', total, '', balance];
       const balIdx = vals.length - 1;
-      const numericCols = isDealer ? [8, 10, 11, 12] : [8,9,10,11,12,13,14,15,16,17];
+      const numericCols = isDealer ? [8, 10, 11, 13] : [8,9,10,11,12,13,14,15,16,18];
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = intVal(v);
@@ -449,6 +477,8 @@ async function buildAccountExcel(userId) {
         c.alignment = { vertical: 'middle', horizontal: i >= 8 ? 'right' : 'left' };
         c.border = allBorder();
       });
+      writeTotCell(row, total);
+      writeBalFormula(row, rowIdx, balance);
     } else {
       const p = item.data;
       const rowTotal = n(p.computed_total);
@@ -460,7 +490,7 @@ async function buildAccountExcel(userId) {
             p.lot_no || '', p.chassis_no || '',
             p.make || '', p.model || '', p.year || '',
             n(p.bid_price), n(p.others), n(p.others_commission),
-            rowTotal, balance
+            rowTotal, '', balance
           ]
         : [
             carNo++, fmtDate(p.auction_date), p.auction_name || '',
@@ -469,13 +499,13 @@ async function buildAccountExcel(userId) {
             n(p.bid_price), n(p.auction_charges),
             n(p.transportation), n(p.loading_custom), n(p.others_commission),
             n(p.radiation_photos), n(p.custom_fee), n(p.freight),
-            rowTotal, balance
+            rowTotal, '', balance
           ];
 
       const numericCols = isDealer
-        ? [8, 9, 10, 11, 12]
-        : [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-      const balanceIdx = isDealer ? 12 : 17;
+        ? [8, 9, 10, 11, 13]
+        : [8, 9, 10, 11, 12, 13, 14, 15, 16, 18];
+      const balanceIdx = isDealer ? 13 : 18;
 
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
@@ -486,6 +516,8 @@ async function buildAccountExcel(userId) {
         c.alignment = { vertical: 'middle', horizontal: i >= 8 ? 'right' : i === 7 ? 'center' : 'left' };
         c.border = allBorder();
       });
+      writeTotCell(row, rowTotal);
+      writeBalFormula(row, rowIdx, balance);
     }
     rowIdx++;
   }
