@@ -11,7 +11,7 @@ const getDealerFee = async () => {
 };
 
 const calcTotal = (pd, userType) => {
-  const n = (v) => Number(v) || 0;
+  const n = (v) => Math.round(Number(v) || 0);
   if (userType === 'dealer') {
     return n(pd.bid_price) + n(pd.others) + n(pd.dealer_fee);
   }
@@ -84,17 +84,19 @@ const buildLedger = async (userId) => {
 
   let balance = 0;
   return entries.map(e => {
-    balance += Number(e.credit) - Number(e.debit);
-    return { ...e, credit: Number(e.credit), debit: Number(e.debit), balance: Math.round(balance * 100) / 100 };
+    const credit = Math.round(Number(e.credit) || 0);
+    const debit  = Math.round(Number(e.debit)  || 0);
+    balance += credit - debit;
+    return { ...e, credit, debit, balance };
   });
 };
 
 router.get('/my', auth, async (req, res) => {
   try {
     const ledger = await buildLedger(req.user.id);
-    const totalCredit = ledger.reduce((s, r) => s + r.credit, 0);
-    const totalDebit = ledger.reduce((s, r) => s + r.debit, 0);
-    const balance = totalCredit - totalDebit;
+    const totalCredit = Math.round(ledger.reduce((s, r) => s + r.credit, 0));
+    const totalDebit  = Math.round(ledger.reduce((s, r) => s + r.debit,  0));
+    const balance     = totalCredit - totalDebit;
     res.json({ ledger, totalCredit, totalDebit, balance });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -104,9 +106,9 @@ router.get('/my', auth, async (req, res) => {
 router.get('/user/:userId', adminAuth, async (req, res) => {
   try {
     const ledger = await buildLedger(req.params.userId);
-    const totalCredit = ledger.reduce((s, r) => s + r.credit, 0);
-    const totalDebit = ledger.reduce((s, r) => s + r.debit, 0);
-    const balance = totalCredit - totalDebit;
+    const totalCredit = Math.round(ledger.reduce((s, r) => s + r.credit, 0));
+    const totalDebit  = Math.round(ledger.reduce((s, r) => s + r.debit,  0));
+    const balance     = totalCredit - totalDebit;
     const [[user]] = await db.query('SELECT user_id, name, email, country FROM users WHERE user_id = ?', [req.params.userId]);
     res.json({ user, ledger, totalCredit, totalDebit, balance });
   } catch (err) {
