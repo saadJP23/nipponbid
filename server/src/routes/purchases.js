@@ -47,7 +47,7 @@ router.get('/my', auth, async (req, res) => {
       `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade,
               a.auction_name, a.auction_date,
               ci.url AS car_image,
-              (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id) AS doc_count
+              (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id AND d.type != 'admin_only') AS doc_count
        FROM purchases p
        JOIN cars c ON c.car_id = p.car_id
        LEFT JOIN auctions a ON a.auction_id = p.auction_id
@@ -152,8 +152,8 @@ router.get('/', adminAuth, async (req, res) => {
               END AS purchase_total,
               (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id) AS doc_count
        FROM purchases p
-       JOIN cars c ON c.car_id = p.car_id
-       JOIN users u ON u.user_id = p.user_id
+       JOIN cars c      ON c.car_id = p.car_id
+       JOIN users u     ON u.user_id = p.user_id
        LEFT JOIN auctions a ON a.auction_id = p.auction_id
        LEFT JOIN car_images ci ON ci.car_id = c.car_id AND ci.is_primary = 1
        LEFT JOIN purchase_details pd ON pd.purchase_id = p.purchase_id

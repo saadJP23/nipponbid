@@ -39,12 +39,18 @@ const makeStorage = (folder) =>
  */
 async function uploadToCloudinary(buffer, folder, originalname, mimetype) {
   const resourceType = mimetype.startsWith('image/') ? 'image' : 'raw';
+  // For raw files (PDFs, ZIPs, etc.) include the original extension in the public_id
+  // so Cloudinary preserves it in the URL and browsers can open the file correctly.
+  const ext = path.extname(originalname || '').toLowerCase();
+  const publicId = resourceType === 'raw'
+    ? `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`
+    : `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder,
         resource_type: resourceType,
-        public_id: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+        public_id: publicId,
         use_filename: false,
       },
       (err, result) => {
