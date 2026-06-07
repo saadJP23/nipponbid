@@ -110,12 +110,27 @@ router.get('/:id', auth, async (req, res) => {
 
 router.get('/', adminAuth, async (req, res) => {
   try {
-    const { user_id, page = 1, limit = 15 } = req.query;
+    const { user_id, page = 1, limit = 15, search } = req.query;
     let where = '1=1';
     const params = [];
     if (user_id) { where += ' AND p.user_id = ?'; params.push(user_id); }
+    if (search) {
+      where += ` AND (
+        c.chassis_no LIKE ? OR p.lot_no LIKE ? OR
+        a.auction_name LIKE ? OR c.make LIKE ? OR
+        c.model LIKE ? OR p.pro_invoice_no LIKE ? OR
+        p.file_code_no LIKE ?
+      )`;
+      const q = `%${search}%`;
+      params.push(q, q, q, q, q, q, q);
+    }
     const offset = (page - 1) * limit;
-    const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM purchases p WHERE ${where}`, params);
+    const [[{ total }]] = await db.query(
+      `SELECT COUNT(*) as total FROM purchases p
+       JOIN cars c ON c.car_id = p.car_id
+       JOIN users u ON u.user_id = p.user_id
+       LEFT JOIN auctions a ON a.auction_id = p.auction_id
+       WHERE ${where}`, params);
     const [rows] = await db.query(
       `SELECT p.*, c.make, c.model, c.year, c.chassis_no,
               a.auction_name, a.auction_date,

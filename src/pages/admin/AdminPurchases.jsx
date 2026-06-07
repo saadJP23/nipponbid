@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { getAllPurchases, getPurchase, updatePurchase, createPurchase, createCar, createAuction, getAuctions, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers, getPurchaseNextMeta } from '../../services/api'
-import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown, Plus, RefreshCw } from 'lucide-react'
+import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown, Plus, RefreshCw, Search, X } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 
@@ -56,6 +56,8 @@ export default function AdminPurchases() {
   const [pages, setPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [userFilter, setUserFilter] = useState('')
+  const [search, setSearch] = useState(() => sessionStorage.getItem('purchases_search') || '')
+  const [searchInput, setSearchInput] = useState(() => sessionStorage.getItem('purchases_search') || '')
   const [users, setUsers] = useState([])
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
@@ -90,17 +92,35 @@ export default function AdminPurchases() {
     getAdminUsers({ limit: 200 }).then(r => setUsers(r.data.users || [])).catch(() => {})
   }, [])
 
-  const load = useCallback((p, uid) => {
+  const load = useCallback((p, uid, q) => {
     setLoading(true)
-    getAllPurchases({ page: p, limit: 15, ...(uid ? { user_id: uid } : {}) })
+    getAllPurchases({
+      page: p, limit: 15,
+      ...(uid ? { user_id: uid } : {}),
+      ...(q  ? { search: q }    : {}),
+    })
       .then(r => { setPurchases(r.data.purchases || []); setTotal(r.data.total || 0); setPages(r.data.pages || 1) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { load(page, userFilter) }, [page, userFilter, load])
+  useEffect(() => { load(page, userFilter, search) }, [page, userFilter, search, load])
 
   const handleUserFilter = (uid) => { setUserFilter(uid); setPage(1) }
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    sessionStorage.setItem('purchases_search', searchInput)
+    setSearch(searchInput)
+    setPage(1)
+  }
+
+  const handleResetSearch = () => {
+    sessionStorage.removeItem('purchases_search')
+    setSearch('')
+    setSearchInput('')
+    setPage(1)
+  }
 
   const setC = (k) => (e) => setCreateForm(f => ({ ...f, [k]: e.target.value }))
   const setNA = (k) => (e) => setNewAuction(f => ({ ...f, [k]: e.target.value }))
@@ -210,7 +230,7 @@ export default function AdminPurchases() {
       toast.success('Purchase created successfully')
       setShowCreate(false)
       setCreateForm(BLANK_CREATE)
-      load(page, userFilter)
+      load(page, userFilter, search)
     } catch (err) { toast.error(err.response?.data?.message || 'Failed to create purchase') }
     finally { setSubmitting(false) }
   }
@@ -260,7 +280,7 @@ export default function AdminPurchases() {
     try {
       await updatePurchase(selected.purchase_id, { ...form })
       toast.success('Purchase updated')
-      load(page)
+      load(page, userFilter, search)
       reloadDetail()
     } catch { toast.error('Failed to save') }
     finally { setSaving(false) }
@@ -297,12 +317,35 @@ export default function AdminPurchases() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Purchases</h1>
-            <p className="page-subtitle">{fmt(total)} total{userFilter ? ` · ${users.find(u => u.user_id === Number(userFilter))?.name}` : ''}</p>
+            <p className="page-subtitle">
+              {fmt(total)} total
+              {userFilter ? ` · ${users.find(u => u.user_id === Number(userFilter))?.name}` : ''}
+              {search ? ` · "${search}"` : ''}
+            </p>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap justify-end">
+            {/* Search bar */}
+            <form onSubmit={handleSearch} className="flex gap-1">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400" />
+                <input
+                  className="input pl-8 min-w-[220px]"
+                  placeholder="Chassis, lot, auction, make…"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                />
+              </div>
+              <button type="submit" className="btn btn-secondary">Search</button>
+              {search && (
+                <button type="button" className="btn btn-secondary text-red-500" onClick={handleResetSearch}>
+                  <X size={14} /> Reset
+                </button>
+              )}
+            </form>
+            {/* User filter */}
             <div className="relative">
               <select
-                className="input pr-8 appearance-none min-w-[200px]"
+                className="input pr-8 appearance-none min-w-[180px]"
                 value={userFilter}
                 onChange={e => handleUserFilter(e.target.value)}
               >
