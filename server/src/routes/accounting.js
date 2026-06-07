@@ -427,7 +427,7 @@ async function buildAccountExcel(userId) {
   const writeBalFormula = (row, rowNum, computedBal) => {
     const prevRef = rowNum === FIRST_ROW ? '0' : `${balCol}${rowNum - 1}`;
     const cell = row.getCell(balColNum);
-    cell.value = { formula: `=${prevRef}-(${totCol}${rowNum}-${debCol}${rowNum})`, result: computedBal };
+    cell.value = { formula: `=${prevRef}-(N(${totCol}${rowNum})-N(${debCol}${rowNum}))`, result: computedBal };
   };
 
   for (const item of allRows) {
