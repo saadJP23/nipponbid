@@ -71,7 +71,8 @@ router.get('/:id', auth, async (req, res) => {
       // Admin: treat :id as direct purchase_id
       [rows] = await db.query(
         `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade, c.engine, c.transmission,
-                a.auction_name, a.auction_date, a.location AS auction_location,
+                a.auction_name, a.auction_date AS auction_house_date, a.location AS auction_location,
+                p.auction_date AS auction_date,
                 u.name AS user_name, u.email AS user_email, u.country AS user_country, u.contact_number AS user_phone
          FROM purchases p
          JOIN cars c ON c.car_id = p.car_id
@@ -84,7 +85,8 @@ router.get('/:id', auth, async (req, res) => {
       // User: treat :id as direct purchase_id, scoped to their account
       [rows] = await db.query(
         `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade, c.engine, c.transmission,
-                a.auction_name, a.auction_date, a.location AS auction_location,
+                a.auction_name, a.auction_date AS auction_house_date, a.location AS auction_location,
+                p.auction_date AS auction_date,
                 u.name AS user_name, u.email AS user_email, u.country AS user_country, u.contact_number AS user_phone
          FROM purchases p
          JOIN cars c ON c.car_id = p.car_id
