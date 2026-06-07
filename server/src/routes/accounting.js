@@ -131,7 +131,9 @@ async function buildAccountExcel(userId, adminView = false) {
   const dealerFee = await getDealerFee();
   // In admin view, dealers get the full ordinary breakdown so admin sees all cost fields.
   // In user's own view, dealers see their simplified layout.
-  const isDealer  = userType === 'dealer' && !adminView;
+  const isDealer      = userType === 'dealer' && !adminView;
+  // Admin always gets the full 22-column layout with tax, recycle, dealer commission
+  const isAdminLayout = adminView;
 
   // Full purchase details
   const [purchasesRaw] = await db.query(
@@ -238,7 +240,33 @@ async function buildAccountExcel(userId, adminView = false) {
   const netBalance     = totalReceived - totalBilled;
 
   // Merge & column widths
-  data.columns = isDealer
+  // admin=22 cols, ordinary=19 cols, dealer=14 cols
+  data.columns = isAdminLayout
+    ? [
+        { key: 'no',       width: 5  },
+        { key: 'date',     width: 13 },
+        { key: 'auc',      width: 20 },
+        { key: 'lot',      width: 8  },
+        { key: 'chassis',  width: 17 },
+        { key: 'make',     width: 10 },
+        { key: 'model',    width: 12 },
+        { key: 'year',     width: 6  },
+        { key: 'bid',      width: 12 },
+        { key: 'aucfee',   width: 10 },
+        { key: 'trans',    width: 13 },
+        { key: 'lc',       width: 12 },
+        { key: 'ncomm',    width: 14 },
+        { key: 'rad',      width: 12 },
+        { key: 'custom',   width: 10 },
+        { key: 'freight',  width: 10 },
+        { key: 'tax',      width: 10 },
+        { key: 'recycle',  width: 10 },
+        { key: 'dcomm',    width: 14 },
+        { key: 'total',    width: 13 },
+        { key: 'debit',    width: 13 },
+        { key: 'balance',  width: 14 },
+      ]
+    : isDealer
     ? [
         { key: 'no',      width: 5  },
         { key: 'date',    width: 13 },
@@ -277,10 +305,10 @@ async function buildAccountExcel(userId, adminView = false) {
         { key: 'balance',width: 14 },
       ];
 
-  // Column count differs by type: dealer=14, ordinary=19
-  const lastCol  = isDealer ? 'N' : 'S';
-  const midCol   = isDealer ? 'H' : 'I';
-  const midCol2  = isDealer ? 'I' : 'J';
+  // admin=22 cols (A-V), ordinary=19 (A-S), dealer=14 (A-N)
+  const lastCol  = isAdminLayout ? 'V' : isDealer ? 'N' : 'S';
+  const midCol   = isAdminLayout ? 'K' : isDealer ? 'H' : 'I';
+  const midCol2  = isAdminLayout ? 'L' : isDealer ? 'I' : 'J';
 
   // Row 1 — Title
   data.mergeCells(`A1:${lastCol}1`);
@@ -384,7 +412,12 @@ async function buildAccountExcel(userId, adminView = false) {
   data.getRow(11).height = 14;
 
   // Row 12 — Column headers
-  const COL_HEADERS = isDealer
+  const COL_HEADERS = isAdminLayout
+    ? ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO',
+       'MAKE','MODEL','YEAR','BID PRICE','AUCTION',
+       'TRANSPORTATION','LOADING\n/CUSTOM','NIPPONBID\nCOMMISSION','RADIATION\n& PHOTOS',
+       'CUSTOM','FREIGHT','TAX\n10%','RECYCLE','DEALER\nCOMMISSION','TOTAL','DEBIT','BALANCE']
+    : isDealer
     ? ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO','MAKE','MODEL','YEAR',
        'BID PRICE','OTHERS','COMMISSION','TOTAL','DEBIT','BALANCE']
     : ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO',
@@ -408,14 +441,14 @@ async function buildAccountExcel(userId, adminView = false) {
   let balance = 0;
   const addInt = (a, b) => Math.round(a + b);
 
-  // Column letters: ordinary Q=TOTAL, R=DEBIT, S=BALANCE; dealer L=TOTAL, M=DEBIT, N=BALANCE
-  const totCol    = isDealer ? 'L' : 'Q';
-  const debCol    = isDealer ? 'M' : 'R';
-  const balCol    = isDealer ? 'N' : 'S';
-  const balColNum = isDealer ? 14 : 19;
+  // Column letters: admin T=TOTAL,U=DEBIT,V=BALANCE | ordinary Q,R,S | dealer L,M,N
+  const totCol    = isAdminLayout ? 'T' : isDealer ? 'L' : 'Q';
+  const debCol    = isAdminLayout ? 'U' : isDealer ? 'M' : 'R';
+  const balCol    = isAdminLayout ? 'V' : isDealer ? 'N' : 'S';
+  const balColNum = isAdminLayout ? 22 : isDealer ? 14 : 19;
   const FIRST_ROW = 13;
 
-  const totColNum = isDealer ? 12 : 17;
+  const totColNum = isAdminLayout ? 20 : isDealer ? 12 : 17;
 
   const writeTotCell = (row, total) => {
     const cell = row.getCell(totColNum);
@@ -443,10 +476,9 @@ async function buildAccountExcel(userId, adminView = false) {
       const r = item.data;
       const amt = n(r.deposit_amount);
       balance = addInt(balance, amt);
-      // dealer: 14 cols (TOTAL=col13, DEBIT=col13, BALANCE=col14)
-      // ordinary: 19 cols (TOTAL=col17, DEBIT=col18, BALANCE=col19)
-      const amtIdx = isDealer ? 12 : 17;
-      const balIdx = isDealer ? 13 : 18;
+      // admin: 22 cols (DEBIT=col21), ordinary: 19 (col18), dealer: 14 (col13)
+      const amtIdx = isAdminLayout ? 20 : isDealer ? 12 : 17;
+      const balIdx = isAdminLayout ? 21 : isDealer ? 13 : 18;
       const empties = Array(amtIdx - 3).fill('');
       const vals = ['►', fmtDate(r.tt_date || r.confirmed_at), `PAYMENT RECEIVED  —  ${r.ref_no}`, ...empties, amt, balance];
       vals.forEach((v, i) => {
@@ -465,11 +497,13 @@ async function buildAccountExcel(userId, adminView = false) {
       const p = item.data;
       const total = n(p.bid_price) + n(p.delivery_charges) + n(p.commission);
       balance = addInt(balance, -total);
-      const vals = isDealer
+      const vals = isAdminLayout
+        ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', '', '', '', total, '', balance]
+        : isDealer
         ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.commission), total, '', balance]
         : [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', total, '', balance];
       const balIdx = vals.length - 1;
-      const numericCols = isDealer ? [8, 10, 11, 13] : [8,9,10,11,12,13,14,15,16,18];
+      const numericCols = isAdminLayout ? [8,10,12,19,21] : isDealer ? [8, 10, 11, 13] : [8,9,10,11,12,13,14,15,16,18];
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = intVal(v);
@@ -486,7 +520,18 @@ async function buildAccountExcel(userId, adminView = false) {
       const rowTotal = n(p.computed_total);
       balance = addInt(balance, -rowTotal);
 
-      const vals = isDealer
+      const vals = isAdminLayout
+        ? [
+            carNo++, fmtDate(p.auction_date), p.auction_name || '',
+            p.lot_no || '', p.chassis_no || '',
+            p.make || '', p.model || '', p.year || '',
+            n(p.bid_price), n(p.auction_charges),
+            n(p.transportation), n(p.loading_custom), n(p.others_commission),
+            n(p.radiation_photos), n(p.custom_fee), n(p.freight),
+            n(p.tax_10_percent), n(p.recycle), n(p.dealer_fee),
+            rowTotal, '', balance
+          ]
+        : isDealer
         ? [
             carNo++, fmtDate(p.auction_date), p.auction_name || '',
             p.lot_no || '', p.chassis_no || '',
@@ -504,10 +549,12 @@ async function buildAccountExcel(userId, adminView = false) {
             rowTotal, '', balance
           ];
 
-      const numericCols = isDealer
+      const numericCols = isAdminLayout
+        ? [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21]
+        : isDealer
         ? [8, 9, 10, 11, 13]
         : [8, 9, 10, 11, 12, 13, 14, 15, 16, 18];
-      const balanceIdx = isDealer ? 13 : 18;
+      const balanceIdx = isAdminLayout ? 21 : isDealer ? 13 : 18;
 
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
