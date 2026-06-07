@@ -60,9 +60,9 @@ const buildLedger = async (userId) => {
   const purchaseRowsMapped = purchaseRows.map(r => ({
     ...r,
     debit: calcTotal(r, userType),
-    bid_price:  Number(r.bid_price)  || 0,
-    others:     Number(r.others)     || 0,
-    commission: userType === 'dealer' ? (Number(r.dealer_fee) || 0) : (Number(r.others_commission) || 0),
+    bid_price:  Math.round(Number(r.bid_price)  || 0),
+    others:     Math.round(Number(r.others)     || 0),
+    commission: userType === 'dealer' ? Math.round(Number(r.dealer_fee) || 0) : Math.round(Number(r.others_commission) || 0),
   }));
 
   // Debits — parts purchases
@@ -223,11 +223,11 @@ async function buildAccountExcel(userId) {
   parts.forEach(p => allRows.push({ type: 'parts', date: p.created_at, data: p }));
   allRows.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
 
-  const totalPurchases = purchases.reduce((s, p) => s + n(p.computed_total), 0);
-  const totalParts = parts.reduce((s, p) => s + n(p.bid_price) + n(p.delivery_charges) + n(p.commission), 0);
-  const totalBilled = totalPurchases + totalParts;
-  const totalReceived = remittances.reduce((s, r) => s + n(r.deposit_amount), 0);
-  const netBalance = totalReceived - totalBilled;
+  const totalPurchases = Math.round(purchases.reduce((s, p) => s + n(p.computed_total), 0));
+  const totalParts     = Math.round(parts.reduce((s, p) => s + n(p.bid_price) + n(p.delivery_charges) + n(p.commission), 0));
+  const totalBilled    = totalPurchases + totalParts;
+  const totalReceived  = Math.round(remittances.reduce((s, r) => s + n(r.deposit_amount), 0));
+  const netBalance     = totalReceived - totalBilled;
 
   // Merge & column widths
   data.columns = isDealer
@@ -769,10 +769,10 @@ router.get('/summary', adminAuth, async (req, res) => {
   try {
     const [users] = await db.query("SELECT user_id, name, email, country FROM users WHERE role = 'user' ORDER BY name");
     const summaries = await Promise.all(users.map(async (u) => {
-      const ledger = await buildLedger(u.user_id);
-      const totalCredit = ledger.reduce((s, r) => s + r.credit, 0);
-      const totalDebit = ledger.reduce((s, r) => s + r.debit, 0);
-      return { ...u, totalCredit, totalDebit, balance: totalCredit - totalDebit };
+      const ledger      = await buildLedger(u.user_id);
+      const total_credit = Math.round(ledger.reduce((s, r) => s + r.credit, 0));
+      const total_debit  = Math.round(ledger.reduce((s, r) => s + r.debit,  0));
+      return { ...u, total_credit, total_debit, total_billed: total_debit, total_paid: total_credit, balance: total_credit - total_debit };
     }));
     res.json(summaries);
   } catch (err) {
