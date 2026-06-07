@@ -26,11 +26,23 @@ const COST_FIELDS = [
 
 function blankForm(detail, purchase) {
   return {
+    // purchase fields
     destination:     purchase?.destination     || '',
     pro_invoice_no:  purchase?.pro_invoice_no  || '',
     file_code_no:    purchase?.file_code_no    || '',
     lot_no:          purchase?.lot_no          || '',
     remarks:         purchase?.remarks         || '',
+    auction_date:    purchase?.auction_date ? purchase.auction_date.slice(0, 10) : '',
+    // car fields
+    make:         purchase?.make         || '',
+    model:        purchase?.model        || '',
+    year:         purchase?.year         || '',
+    chassis_no:   purchase?.chassis_no   || '',
+    color:        purchase?.color        || '',
+    mileage:      purchase?.mileage      || '',
+    grade:        purchase?.grade        || '',
+    engine:       purchase?.engine       || '',
+    transmission: purchase?.transmission || '',
     bid_price:          detail?.bid_price          || 0,
     auction_charges:      detail?.auction_charges      || 0,
     dealer_fee:           detail?.dealer_fee           || 0,
@@ -449,7 +461,7 @@ export default function AdminPurchases() {
               </div>
             )}
 
-            {/* User info */}
+            {/* User info — read only */}
             <div>
               <p className="label">User</p>
               <div className="card p-3">
@@ -459,6 +471,31 @@ export default function AdminPurchases() {
                     <span className="text-sm font-medium text-navy">{v}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Editable car info */}
+            <div>
+              <p className="label">Vehicle Info</p>
+              <div className="card p-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: 'make',         label: 'Make' },
+                    { key: 'model',        label: 'Model' },
+                    { key: 'year',         label: 'Year' },
+                    { key: 'chassis_no',   label: 'Chassis No.' },
+                    { key: 'color',        label: 'Color' },
+                    { key: 'mileage',      label: 'Mileage (km)' },
+                    { key: 'grade',        label: 'Grade' },
+                    { key: 'engine',       label: 'Engine' },
+                    { key: 'transmission', label: 'Transmission' },
+                  ].map(({ key, label }) => (
+                    <div key={key}>
+                      <label className="label">{label}</label>
+                      <input className="input" value={form[key] || ''} onChange={set(key)} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -477,6 +514,10 @@ export default function AdminPurchases() {
                       <input className="input" value={form[key] || ''} onChange={set(key)} />
                     </div>
                   ))}
+                  <div>
+                    <label className="label">Auction Date</label>
+                    <input type="date" className="input" value={form.auction_date || ''} onChange={set('auction_date')} />
+                  </div>
                   <div className="col-span-2">
                     <label className="label">Destination</label>
                     <input className="input" value={form.destination || ''} onChange={set('destination')} />

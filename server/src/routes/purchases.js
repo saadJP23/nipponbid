@@ -194,17 +194,24 @@ router.post('/', adminAuth, async (req, res) => {
 
 router.put('/:id', adminAuth, async (req, res) => {
   try {
-    const { destination, pro_invoice_no, file_code_no, lot_no, remarks,
+    const { destination, pro_invoice_no, file_code_no, lot_no, remarks, auction_date,
             bid_price, auction_charges, transportation, loading_custom,
             others_commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others,
-            dealer_fee, nipponbid_commission, is_third_party, third_party_fee } = req.body;
+            dealer_fee, nipponbid_commission, is_third_party, third_party_fee,
+            make, model, year, chassis_no, color, mileage, grade, engine, transmission } = req.body;
 
     const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
     if (!purchase.length) return res.status(404).json({ message: 'Purchase not found' });
 
     await db.query(
-      `UPDATE purchases SET destination=?, pro_invoice_no=?, file_code_no=?, lot_no=?, remarks=? WHERE purchase_id=?`,
-      [destination||null, pro_invoice_no||null, file_code_no||null, lot_no||null, remarks||null, req.params.id]
+      `UPDATE purchases SET destination=?, pro_invoice_no=?, file_code_no=?, lot_no=?, remarks=?, auction_date=? WHERE purchase_id=?`,
+      [destination||null, pro_invoice_no||null, file_code_no||null, lot_no||null, remarks||null, auction_date||null, req.params.id]
+    );
+
+    // Update car details
+    await db.query(
+      `UPDATE cars SET make=?, model=?, year=?, chassis_no=?, color=?, mileage=?, grade=?, engine=?, transmission=? WHERE car_id=?`,
+      [make||null, model||null, year||null, chassis_no||null, color||null, mileage||null, grade||null, engine||null, transmission||null, purchase[0].car_id]
     );
 
     const [existing] = await db.query('SELECT purchase_detail_id FROM purchase_details WHERE purchase_id=?', [req.params.id]);
