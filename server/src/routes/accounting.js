@@ -185,7 +185,7 @@ async function buildAccountExcel(userId) {
     const yr  = String(dt.getFullYear()).slice(2);
     return `${day}-${mon}-${yr}`;
   };
-  const n = (v) => Number(v) || 0;
+  const n = (v) => Math.round(Number(v) || 0);
   const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
 
   const wb = new ExcelJS.Workbook();
@@ -398,6 +398,7 @@ async function buildAccountExcel(userId) {
   let rowIdx = 13;
   let carNo  = 1;
   let balance = 0;
+  const addInt = (a, b) => Math.round(a + b);
 
   for (const item of allRows) {
     const row = data.getRow(rowIdx);
@@ -409,7 +410,7 @@ async function buildAccountExcel(userId) {
     if (isPay) {
       const r = item.data;
       const amt = n(r.deposit_amount);
-      balance += amt;
+      balance = addInt(balance, amt);
       const totalCols = isDealer ? 14 : 19;
       const empties = Array(totalCols - 4).fill('');
       const vals = ['►', fmtDate(r.tt_date || r.confirmed_at), `PAYMENT RECEIVED  —  ${r.ref_no}`, ...empties, amt, balance];
@@ -429,7 +430,7 @@ async function buildAccountExcel(userId) {
     } else if (isPart) {
       const p = item.data;
       const total = n(p.bid_price) + n(p.delivery_charges) + n(p.commission);
-      balance -= total;
+      balance = addInt(balance, -total);
       const vals = isDealer
         ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.commission), total, '', balance]
         : [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', total, '', balance];
@@ -447,7 +448,7 @@ async function buildAccountExcel(userId) {
     } else {
       const p = item.data;
       const rowTotal = n(p.computed_total);
-      balance -= rowTotal;
+      balance = addInt(balance, -rowTotal);
 
       const vals = isDealer
         ? [

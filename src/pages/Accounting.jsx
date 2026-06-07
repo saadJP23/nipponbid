@@ -90,7 +90,6 @@ export default function Accounting() {
                 <th className="text-right">Others</th>
                 <th className="text-right">Commission</th>
                 <th className="text-right">Debit</th>
-                <th className="text-right">Credit</th>
                 <th className="text-right">Balance</th>
               </tr></thead>
               <tbody>
@@ -110,13 +109,14 @@ export default function Accounting() {
                       {e.entry_type === 'purchase' ? `¥ ${fmt(e.commission)}` : '—'}
                     </td>
                     <td className="text-right font-mono">
-                      {e.debit > 0 ? <span className="text-red">¥ {fmt(e.debit)}</span> : '—'}
-                    </td>
-                    <td className="text-right font-mono">
-                      {e.credit > 0 ? <span className="text-green">¥ {fmt(e.credit)}</span> : '—'}
+                      {e.debit > 0
+                        ? <span className="text-red">¥ {fmt(Math.round(e.debit))}</span>
+                        : e.credit > 0
+                          ? <span className="text-green">¥ {fmt(Math.round(e.credit))}</span>
+                          : '—'}
                     </td>
                     <td className={`text-right font-mono font-semibold ${e.balance >= 0 ? 'text-green' : 'text-red'}`}>
-                      ¥ {fmt(Math.abs(e.balance))}
+                      ¥ {fmt(Math.abs(Math.round(e.balance)))}
                     </td>
                   </tr>
                 ))}
