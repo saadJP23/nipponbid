@@ -24,6 +24,12 @@ const COST_FIELDS = [
   { key: 'nipponbid_commission', label: 'NipponBid Commission' },
 ]
 
+const toDateStr = (d) => {
+  if (!d) return ''
+  const s = d instanceof Date ? d.toISOString() : String(d)
+  return s.slice(0, 10)
+}
+
 function blankForm(detail, purchase) {
   return {
     // purchase fields
@@ -32,7 +38,7 @@ function blankForm(detail, purchase) {
     file_code_no:    purchase?.file_code_no    || '',
     lot_no:          purchase?.lot_no          || '',
     remarks:         purchase?.remarks         || '',
-    auction_date:    purchase?.auction_date ? purchase.auction_date.slice(0, 10) : '',
+    auction_date:    toDateStr(purchase?.auction_date),
     // car fields
     make:         purchase?.make         || '',
     model:        purchase?.model        || '',
@@ -161,7 +167,7 @@ export default function AdminPurchases() {
     setCreateForm(f => ({
       ...f,
       auction_id:   auctionId,
-      auction_date: auction?.auction_date ? auction.auction_date.slice(0, 10) : f.auction_date,
+      auction_date: auction?.auction_date ? toDateStr(auction.auction_date) : f.auction_date,
     }))
   }
 
@@ -175,7 +181,7 @@ export default function AdminPurchases() {
       setCreateForm(f => ({
         ...f,
         auction_id:   String(created.auction_id),
-        auction_date: created.auction_date ? created.auction_date.slice(0, 10) : f.auction_date,
+        auction_date: created.auction_date ? toDateStr(created.auction_date) : f.auction_date,
       }))
       setShowNewAuction(false)
       setNewAuction({ auction_name: '', location: '', auction_house: '', auction_date: '' })
