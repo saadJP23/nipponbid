@@ -45,7 +45,8 @@ router.get('/my', auth, async (req, res) => {
     const [[{ total }]] = await db.query('SELECT COUNT(*) as total FROM purchases WHERE user_id = ?', [req.user.id]);
     const [rows] = await db.query(
       `SELECT p.*, c.make, c.model, c.year, c.chassis_no, c.color, c.mileage, c.grade,
-              a.auction_name, a.auction_date,
+              a.auction_name,
+              COALESCE(p.auction_date, a.auction_date) AS auction_date,
               ci.url AS car_image,
               (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id AND d.type != 'admin_only') AS doc_count
        FROM purchases p
