@@ -249,7 +249,6 @@ async function buildAccountExcel(userId) {
         { key: 'bid',     width: 12 },
         { key: 'others',  width: 12 },
         { key: 'comm',    width: 12 },
-        { key: 'total',   width: 13 },
         { key: 'debit',   width: 13 },
         { key: 'balance', width: 14 },
       ]
@@ -270,13 +269,12 @@ async function buildAccountExcel(userId) {
         { key: 'rad',    width: 12 },
         { key: 'custom', width: 10 },
         { key: 'freight',width: 10 },
-        { key: 'total',  width: 13 },
         { key: 'debit',  width: 13 },
         { key: 'balance',width: 14 },
       ];
 
-  // Column count differs by type: dealer=14, ordinary=19
-  const lastCol  = isDealer ? 'N' : 'S';
+  // Column count differs by type: dealer=13, ordinary=18
+  const lastCol  = isDealer ? 'M' : 'R';
   const midCol   = isDealer ? 'H' : 'I';
   const midCol2  = isDealer ? 'I' : 'J';
 
@@ -384,11 +382,11 @@ async function buildAccountExcel(userId) {
   // Row 12 — Column headers
   const COL_HEADERS = isDealer
     ? ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO','MAKE','MODEL','YEAR',
-       'BID PRICE','OTHERS','COMMISSION','TOTAL','DEBIT','BALANCE']
+       'BID PRICE','OTHERS','COMMISSION','DEBIT','BALANCE']
     : ['NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO',
        'MAKE','MODEL','YEAR','BID PRICE','AUCTION',
        'TRANSPORTATION','LOADING\n/CUSTOM','COMMISSION','RADIATION\n& PHOTOS',
-       'CUSTOM','FREIGHT','TOTAL','DEBIT','BALANCE'];
+       'CUSTOM','FREIGHT','DEBIT','BALANCE'];
   const hRow = data.getRow(12);
   hRow.height = 30;
   COL_HEADERS.forEach((h, i) => {
@@ -417,7 +415,7 @@ async function buildAccountExcel(userId) {
       const r = item.data;
       const amt = n(r.deposit_amount);
       balance = addInt(balance, amt);
-      const totalCols = isDealer ? 14 : 19;
+      const totalCols = isDealer ? 13 : 18;
       const empties = Array(totalCols - 4).fill('');
       const vals = ['►', fmtDate(r.tt_date || r.confirmed_at), `PAYMENT RECEIVED  —  ${r.ref_no}`, ...empties, amt, balance];
       const amtIdx = totalCols - 2;
@@ -438,10 +436,10 @@ async function buildAccountExcel(userId) {
       const total = n(p.bid_price) + n(p.delivery_charges) + n(p.commission);
       balance = addInt(balance, -total);
       const vals = isDealer
-        ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.commission), total, '', balance]
-        : [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', total, '', balance];
+        ? [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.commission), total, balance]
+        : [carNo++, fmtDate(p.created_at), 'PARTS PURCHASE', '', '', '', p.part_name, '', n(p.bid_price), '', n(p.delivery_charges), '', n(p.commission), '', '', '', total, balance];
       const balIdx = vals.length - 1;
-      const numericCols = isDealer ? [8, 10, 11, 13] : [8,9,10,11,12,13,14,15,16,18];
+      const numericCols = isDealer ? [8, 10, 11, 12] : [8,9,10,11,12,13,14,15,16,17];
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
         c.value = intVal(v);
@@ -462,7 +460,7 @@ async function buildAccountExcel(userId) {
             p.lot_no || '', p.chassis_no || '',
             p.make || '', p.model || '', p.year || '',
             n(p.bid_price), n(p.others), n(p.others_commission),
-            rowTotal, '', balance
+            rowTotal, balance
           ]
         : [
             carNo++, fmtDate(p.auction_date), p.auction_name || '',
@@ -471,13 +469,13 @@ async function buildAccountExcel(userId) {
             n(p.bid_price), n(p.auction_charges),
             n(p.transportation), n(p.loading_custom), n(p.others_commission),
             n(p.radiation_photos), n(p.custom_fee), n(p.freight),
-            rowTotal, '', balance
+            rowTotal, balance
           ];
 
       const numericCols = isDealer
-        ? [8, 9, 10, 11, 13]
-        : [8, 9, 10, 11, 12, 13, 14, 15, 16, 18];
-      const balanceIdx = isDealer ? 13 : 18;
+        ? [8, 9, 10, 11, 12]
+        : [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+      const balanceIdx = isDealer ? 12 : 17;
 
       vals.forEach((v, i) => {
         const c = row.getCell(i + 1);
