@@ -38,7 +38,7 @@ const makeStorage = (folder) =>
  * @returns {Promise<string>} secure_url
  */
 async function uploadToCloudinary(buffer, folder, originalname, mimetype) {
-  const resourceType = mimetype === 'application/pdf' ? 'raw' : 'image';
+  const resourceType = mimetype.startsWith('image/') ? 'image' : 'raw';
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
@@ -63,9 +63,13 @@ const imageFilter = (req, file, cb) => {
 };
 
 const docFilter = (req, file, cb) => {
-  const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+  const allowed = [
+    'image/jpeg', 'image/png', 'application/pdf',
+    'application/zip', 'application/x-zip-compressed',
+    'application/x-zip', 'application/octet-stream',
+  ];
   if (allowed.includes(file.mimetype)) cb(null, true);
-  else cb(new Error('Only images and PDFs allowed'), false);
+  else cb(new Error('Only images, PDFs, and ZIP files allowed'), false);
 };
 
 // ─── Multer instances ─────────────────────────────────────────────────────────
