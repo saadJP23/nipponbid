@@ -101,7 +101,12 @@ router.get('/:id', auth, async (req, res) => {
 
     const purchaseId = rows[0].purchase_id;
     const [images]    = await db.query('SELECT * FROM car_images WHERE car_id = ? ORDER BY is_primary DESC', [rows[0].car_id]);
-    const [documents] = await db.query('SELECT * FROM documents WHERE purchase_id = ? ORDER BY created_at DESC', [purchaseId]);
+    const [documents] = await db.query(
+      req.user.role === 'admin'
+        ? 'SELECT * FROM documents WHERE purchase_id = ? ORDER BY created_at DESC'
+        : "SELECT * FROM documents WHERE purchase_id = ? AND type != 'admin_only' ORDER BY created_at DESC",
+      [purchaseId]
+    );
     const [details]   = await db.query('SELECT * FROM purchase_details WHERE purchase_id = ?', [purchaseId]);
 
     res.json({ ...rows[0], images, documents, details: details[0] || null });
