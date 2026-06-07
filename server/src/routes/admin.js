@@ -39,7 +39,13 @@ router.get('/stats', adminAuth, async (req, res) => {
       `SELECT COUNT(*) AS total_purchases FROM purchases p JOIN users u ON u.user_id = p.user_id WHERE ${pWhere.join(' AND ')}`, pParams
     );
     const [[{ car_billed_total }]] = await db.query(
-      `SELECT COALESCE(SUM(pd.total), 0) AS car_billed_total
+      `SELECT COALESCE(SUM(
+         CASE WHEN u.type = 'dealer'
+           THEN COALESCE(pd.bid_price,0) + COALESCE(pd.others,0) + COALESCE(pd.dealer_fee,0)
+           ELSE COALESCE(pd.bid_price,0) + COALESCE(pd.auction_charges,0) + COALESCE(pd.transportation,0) +
+                COALESCE(pd.loading_custom,0) + COALESCE(pd.others_commission,0) +
+                COALESCE(pd.radiation_photos,0) + COALESCE(pd.custom_fee,0) + COALESCE(pd.freight,0)
+         END), 0) AS car_billed_total
        FROM purchase_details pd JOIN purchases p ON p.purchase_id = pd.purchase_id
        JOIN users u ON u.user_id = p.user_id WHERE ${pWhere.join(' AND ')}`, pParams
     );
@@ -84,7 +90,12 @@ router.get('/stats', adminAuth, async (req, res) => {
       `SELECT p.purchase_id, p.file_code_no, p.auction_date, p.created_at,
               c.make, c.model, c.year, c.chassis_no,
               u.name AS user_name, u.country AS user_country,
-              pd.total AS admin_total,
+              CASE WHEN u.type = 'dealer'
+                THEN COALESCE(pd.bid_price,0) + COALESCE(pd.others,0) + COALESCE(pd.dealer_fee,0)
+                ELSE COALESCE(pd.bid_price,0) + COALESCE(pd.auction_charges,0) + COALESCE(pd.transportation,0) +
+                     COALESCE(pd.loading_custom,0) + COALESCE(pd.others_commission,0) +
+                     COALESCE(pd.radiation_photos,0) + COALESCE(pd.custom_fee,0) + COALESCE(pd.freight,0)
+              END AS admin_total,
               ci.url AS car_image
        FROM purchases p
        JOIN cars c ON c.car_id = p.car_id
@@ -102,7 +113,13 @@ router.get('/stats', adminAuth, async (req, res) => {
     }
     const [monthly_billed] = await db.query(
       `SELECT DATE_FORMAT(p.auction_date, '%Y-%m') AS month,
-              COALESCE(SUM(pd.total), 0) AS billed, COUNT(*) AS sales
+              COALESCE(SUM(
+                CASE WHEN u.type = 'dealer'
+                  THEN COALESCE(pd.bid_price,0) + COALESCE(pd.others,0) + COALESCE(pd.dealer_fee,0)
+                  ELSE COALESCE(pd.bid_price,0) + COALESCE(pd.auction_charges,0) + COALESCE(pd.transportation,0) +
+                       COALESCE(pd.loading_custom,0) + COALESCE(pd.others_commission,0) +
+                       COALESCE(pd.radiation_photos,0) + COALESCE(pd.custom_fee,0) + COALESCE(pd.freight,0)
+                END), 0) AS billed, COUNT(*) AS sales
        FROM purchases p
        JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
        JOIN users u ON u.user_id = p.user_id
@@ -148,7 +165,13 @@ router.get('/stats', adminAuth, async (req, res) => {
     const [customer_rows] = await db.query(
       `SELECT u.user_id, u.name, u.country, u.type,
               COUNT(DISTINCT p.purchase_id) AS purchases,
-              COALESCE(SUM(pd.total), 0) AS car_billed
+              COALESCE(SUM(
+                CASE WHEN u.type = 'dealer'
+                  THEN COALESCE(pd.bid_price,0) + COALESCE(pd.others,0) + COALESCE(pd.dealer_fee,0)
+                  ELSE COALESCE(pd.bid_price,0) + COALESCE(pd.auction_charges,0) + COALESCE(pd.transportation,0) +
+                       COALESCE(pd.loading_custom,0) + COALESCE(pd.others_commission,0) +
+                       COALESCE(pd.radiation_photos,0) + COALESCE(pd.custom_fee,0) + COALESCE(pd.freight,0)
+                END), 0) AS car_billed
        FROM purchases p
        JOIN users u ON u.user_id = p.user_id
        JOIN purchase_details pd ON pd.purchase_id = p.purchase_id
@@ -244,8 +267,16 @@ router.get('/users/:id', adminAuth, async (req, res) => {
       [req.params.id]
     );
     const [[{ total_billed }]] = await db.query(
-      `SELECT COALESCE(SUM(pd.total),0) AS total_billed
-       FROM purchase_details pd JOIN purchases p ON p.purchase_id = pd.purchase_id
+      `SELECT COALESCE(SUM(
+         CASE WHEN u.type = 'dealer'
+           THEN COALESCE(pd.bid_price,0) + COALESCE(pd.others,0) + COALESCE(pd.dealer_fee,0)
+           ELSE COALESCE(pd.bid_price,0) + COALESCE(pd.auction_charges,0) + COALESCE(pd.transportation,0) +
+                COALESCE(pd.loading_custom,0) + COALESCE(pd.others_commission,0) +
+                COALESCE(pd.radiation_photos,0) + COALESCE(pd.custom_fee,0) + COALESCE(pd.freight,0)
+         END), 0) AS total_billed
+       FROM purchase_details pd
+       JOIN purchases p ON p.purchase_id = pd.purchase_id
+       JOIN users u ON u.user_id = p.user_id
        WHERE p.user_id = ?`, [req.params.id]
     );
     res.json({ ...user, total_received: Number(total_received), total_billed: Number(total_billed), balance: Number(total_received) - Number(total_billed) });

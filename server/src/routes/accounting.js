@@ -15,10 +15,10 @@ const calcTotal = (pd, userType) => {
   if (userType === 'dealer') {
     return n(pd.bid_price) + n(pd.others) + n(pd.dealer_fee);
   }
-  // ordinary: bid + auction_charges + transportation + loading_custom + others_commission + radiation_photos + custom_fee
+  // ordinary: bid + auction_charges + transportation + loading_custom + others_commission + radiation_photos + custom_fee + freight
   return n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
          n(pd.loading_custom) + n(pd.others_commission) + n(pd.radiation_photos) +
-         n(pd.custom_fee);
+         n(pd.custom_fee) + n(pd.freight);
 };
 
 const buildLedger = async (userId) => {
@@ -131,7 +131,7 @@ async function buildAccountExcel(userId) {
             a.auction_name,
             pd.bid_price, pd.auction_charges, pd.transportation,
             pd.loading_custom, pd.others_commission, pd.tax_10_percent,
-            pd.radiation_photos, pd.custom_fee, pd.freight, pd.recycle, pd.others, pd.total,
+            pd.radiation_photos, pd.custom_fee, pd.freight, pd.recycle, pd.others,
             pd.dealer_fee, pd.nipponbid_commission, pd.is_third_party, pd.third_party_fee
      FROM purchases p
      JOIN cars c ON c.car_id = p.car_id

@@ -290,7 +290,7 @@ export default function AdminPurchases() {
     setForm(f => ({ ...f, nipponbid_commission: calc }))
   }, [form.dealer_fee, form.auction_charges, form.transportation, form.loading_custom, form.others_commission, form.is_third_party, form.third_party_fee, selectedUserType, selected])
 
-  const TOTAL_KEYS = ['bid_price','auction_charges','transportation','loading_custom','others_commission','radiation_photos','custom_fee']
+  const TOTAL_KEYS = ['bid_price','auction_charges','transportation','loading_custom','others_commission','radiation_photos','custom_fee','freight']
   const total_cost = TOTAL_KEYS.reduce((sum, k) => sum + n(form[k]), 0)
 
   const handleSave = async () => {
