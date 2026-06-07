@@ -143,7 +143,7 @@ router.get('/', adminAuth, async (req, res) => {
 router.post('/', adminAuth, async (req, res) => {
   try {
     const { user_id, car_id, auction_id, auction_date, lot_no, destination, pro_invoice_no, file_code_no, remarks,
-            bid_price, auction_charges, transportation, loading_custom, commission,
+            bid_price, auction_charges, transportation, loading_custom, others_commission,
             tax_10_percent, radiation_photos, custom_fee, freight, recycle, others,
             dealer_fee, nipponbid_commission, is_third_party, third_party_fee } = req.body;
 
@@ -160,7 +160,7 @@ router.post('/', adminAuth, async (req, res) => {
         `INSERT INTO purchase_details (purchase_id, bid_price, auction_charges, transportation, loading_custom, others_commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others, dealer_fee, nipponbid_commission, is_third_party, third_party_fee)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [result.insertId, bid_price, auction_charges||0, transportation||0, loading_custom||0,
-         commission||0, tax_10_percent||0, radiation_photos||0, custom_fee||0, freight||0, recycle||0, others||0,
+         others_commission||0, tax_10_percent||0, radiation_photos||0, custom_fee||0, freight||0, recycle||0, others||0,
          dealer_fee||0, nipponbid_commission||0, is_third_party?1:0, third_party_fee||0]
       );
     }
@@ -181,7 +181,7 @@ router.put('/:id', adminAuth, async (req, res) => {
   try {
     const { destination, pro_invoice_no, file_code_no, lot_no, remarks,
             bid_price, auction_charges, transportation, loading_custom,
-            commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others,
+            others_commission, tax_10_percent, radiation_photos, custom_fee, freight, recycle, others,
             dealer_fee, nipponbid_commission, is_third_party, third_party_fee } = req.body;
 
     const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
@@ -197,12 +197,12 @@ router.put('/:id', adminAuth, async (req, res) => {
     if (existing.length) {
       await db.query(
         `UPDATE purchase_details SET bid_price=?,auction_charges=?,transportation=?,loading_custom=?,others_commission=?,tax_10_percent=?,radiation_photos=?,custom_fee=?,freight=?,recycle=?,others=?,dealer_fee=?,nipponbid_commission=?,is_third_party=?,third_party_fee=? WHERE purchase_id=?`,
-        [n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission),is_third_party?1:0,n(third_party_fee),req.params.id]
+        [n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(others_commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission),is_third_party?1:0,n(third_party_fee),req.params.id]
       );
     } else {
       await db.query(
         `INSERT INTO purchase_details (purchase_id,bid_price,auction_charges,transportation,loading_custom,others_commission,tax_10_percent,radiation_photos,custom_fee,freight,recycle,others,dealer_fee,nipponbid_commission,is_third_party,third_party_fee) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [req.params.id,n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission),is_third_party?1:0,n(third_party_fee)]
+        [req.params.id,n(bid_price),n(auction_charges),n(transportation),n(loading_custom),n(others_commission),n(tax_10_percent),n(radiation_photos),n(custom_fee),n(freight),n(recycle),n(others),n(dealer_fee),n(nipponbid_commission),is_third_party?1:0,n(third_party_fee)]
       );
     }
 
