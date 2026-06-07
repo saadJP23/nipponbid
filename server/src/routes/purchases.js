@@ -135,7 +135,8 @@ router.get('/', adminAuth, async (req, res) => {
        WHERE ${where}`, params);
     const [rows] = await db.query(
       `SELECT p.*, c.make, c.model, c.year, c.chassis_no,
-              a.auction_name, a.auction_date,
+              a.auction_name, a.auction_date AS auction_house_date,
+              p.auction_date AS auction_date,
               u.name AS user_name, u.email AS user_email, u.country AS user_country,
               ci.url AS car_image,
               pd.total AS purchase_total,
