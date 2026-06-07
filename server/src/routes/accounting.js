@@ -65,19 +65,23 @@ const buildLedger = async (userId) => {
     commission: userType === 'dealer' ? Math.round(Number(r.dealer_fee) || 0) : Math.round(Number(r.others_commission) || 0),
   }));
 
-  // Debits — parts purchases
-  const [partsRows] = await db.query(
+  // Debits — parts purchases (fetch individual fields so rounding matches Excel)
+  const [partsRowsRaw] = await db.query(
     `SELECT 'parts' AS entry_type,
             CONCAT('PART-', parts_purchase_id) AS ref,
             CONCAT('Parts Purchase - ', part_name) AS description,
             0 AS credit,
-            (COALESCE(bid_price,0) + COALESCE(delivery_charges,0) + COALESCE(commission,0)) AS debit,
+            bid_price, delivery_charges, commission,
             DATE(created_at) AS entry_date,
             parts_purchase_id AS source_id
      FROM parts_purchases
      WHERE user_id = ? AND bid_price IS NOT NULL AND bid_price > 0`,
     [userId]
   );
+  const partsRows = partsRowsRaw.map(r => ({
+    ...r,
+    debit: Math.round(Number(r.bid_price) || 0) + Math.round(Number(r.delivery_charges) || 0) + Math.round(Number(r.commission) || 0),
+  }));
 
   const entries = [...remRows, ...purchaseRowsMapped, ...partsRows]
     .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date));
@@ -86,7 +90,7 @@ const buildLedger = async (userId) => {
   return entries.map(e => {
     const credit = Math.round(Number(e.credit) || 0);
     const debit  = Math.round(Number(e.debit)  || 0);
-    balance += credit - debit;
+    balance = Math.round(balance + credit - debit);
     return { ...e, credit, debit, balance };
   });
 };
