@@ -1,0 +1,11 @@
+apiVersion: v2
+name: nipponbid
+description: NipponBid — Japanese car auction platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - nipponbid
+  - car-auction
+maintainers:
+  - name: saadJP23

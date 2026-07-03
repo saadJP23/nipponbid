@@ -1,0 +1,35 @@
+---
+# Headless service for StatefulSet pod DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-headless
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: mysql
+spec:
+  clusterIP: None
+  selector:
+    app: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+---
+# ClusterIP service — routes to primary pod (mysql-0) only
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: mysql
+spec:
+  type: ClusterIP
+  selector:
+    app: mysql
+    statefulset.kubernetes.io/pod-name: mysql-0
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306

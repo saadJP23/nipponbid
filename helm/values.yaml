@@ -1,0 +1,67 @@
+namespace: nipponbid
+
+frontend:
+  image: ghcr.io/saadjp23/nipponbid-frontend:latest
+  imagePullPolicy: Always
+  replicas: 2
+  service:
+    type: LoadBalancer
+    port: 80
+  hpa:
+    minReplicas: 2
+    maxReplicas: 6
+    cpuUtilization: 70
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+backend:
+  image: ghcr.io/saadjp23/nipponbid-backend:latest
+  imagePullPolicy: Always
+  replicas: 2
+  port: 5000
+  clientUrl: "http://nipponbid.local"
+  service:
+    type: ClusterIP
+    port: 5000
+  hpa:
+    minReplicas: 2
+    maxReplicas: 8
+    cpuUtilization: 70
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+database:
+  image: mysql:8.0
+  replicas: 2
+  storageSize: 5Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+ingress:
+  frontendHost: nipponbid.local
+  apiHost: api.nipponbid.local
+
+secrets:
+  dbName: nipponbid
+  dbUser: root
+  # All sensitive values below — override with --set or a secrets manager in production
+  dbPassword: "UAhrFgyKVimhFeEgmlYEAbRQFDlvGVST"
+  jwtSecret: "nipponbid_super_secret_jwt_key_2024_production"
+  cloudinaryCloudName: "dkkocyj9d"
+  cloudinaryApiKey: "262217819161627"
+  cloudinaryApiSecret: "nfzBrVlQrqh2ysUzqB7kI-p962A"

@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: mysql
+spec:
+  serviceName: mysql-headless
+  replicas: {{ .Values.database.replicas }}
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      initContainers:
+        - name: init-mysql
+          image: {{ .Values.database.image }}
+          command:
+            - bash
+            - "-c"
+            - |
+              ORDINAL=${HOSTNAME##*-}
+              echo "[mysqld]" > /etc/mysql/conf.d/server-id.cnf
+              echo "server-id=$((100 + $ORDINAL))" >> /etc/mysql/conf.d/server-id.cnf
+              if [[ $ORDINAL -eq 0 ]]; then
+                echo "log_bin=mysql-bin" >> /etc/mysql/conf.d/server-id.cnf
+              else
+                echo "super_read_only=ON" >> /etc/mysql/conf.d/server-id.cnf
+              fi
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/mysql/conf.d
+      containers:
+        - name: mysql
+          image: {{ .Values.database.image }}
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nipponbid-secrets
+                  key: DB_PASSWORD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: nipponbid-secrets
+                  key: DB_NAME
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: conf
+              mountPath: /etc/mysql/conf.d
+          resources:
+            {{- toYaml .Values.database.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-uroot", "-p$(MYSQL_ROOT_PASSWORD)"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["mysql", "-uroot", "-p$(MYSQL_ROOT_PASSWORD)", "-e", "SELECT 1"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: conf
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.database.storageSize }}
