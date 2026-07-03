@@ -117,12 +117,12 @@ jobs:
             --set secrets.jwtSecret="${{ secrets.JWT_SECRET }}" \
             --set secrets.cloudinaryApiSecret="${{ secrets.CLOUDINARY_API_SECRET }}" \
             --wait \
-            --timeout 3m
+            --timeout 8m   # MySQL StatefulSet needs time on first install
 
       - name: Verify rollout
         run: |
-          kubectl rollout status deployment/frontend -n nipponbid --timeout=2m
-          kubectl rollout status deployment/backend  -n nipponbid --timeout=2m
+          kubectl rollout status deployment/frontend -n nipponbid --timeout=3m
+          kubectl rollout status deployment/backend  -n nipponbid --timeout=3m
           kubectl get pods -n nipponbid
 
       - name: Notify success
@@ -134,4 +134,11 @@ jobs:
         if: failure()
         run: |
           echo "❌ Deploy failed — rolling back"
-          helm rollback nipponbid -n nipponbid
+          # Only rollback if a previous revision exists (skip on first install)
+          REVISION=$(helm history nipponbid -n nipponbid --max 1 2>/dev/null | tail -1 | awk '{print $1}')
+          if [ "$REVISION" -gt 1 ] 2>/dev/null; then
+            helm rollback nipponbid -n nipponbid
+          else
+            echo "First install failed — no previous version to roll back to"
+            helm uninstall nipponbid -n nipponbid || true
+          fi
