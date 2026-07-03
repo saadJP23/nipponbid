@@ -53,19 +53,20 @@ jobs:
           context: .
           file: Dockerfile.frontend
           push: true
+          platforms: linux/amd64,linux/arm64   # supports both Intel and Apple Silicon
           tags: |
             ${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Build backend
       - name: Build & push backend
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.backend
           push: true
+          platforms: linux/amd64,linux/arm64   # supports both Intel and Apple Silicon
           tags: |
             ${{ env.BACKEND_IMAGE }}:latest
             ${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.version }}
