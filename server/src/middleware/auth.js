@@ -1,11 +1,24 @@
 const jwt = require('jsonwebtoken');
+const { cache } = require('../config/redis');
 
-const auth = (req, res, next) => {
+// Cache decoded JWT payload for 5 minutes so we don't re-verify on every request
+const auth = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'No token provided' });
 
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    // Check Redis first
+    const cacheKey = `session:${token.slice(-16)}`; // last 16 chars as key (tokens are long)
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      req.user = cached;
+      return next();
+    }
+
+    // Verify JWT and cache the payload
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = payload;
+    await cache.set(cacheKey, payload, 300); // cache 5 minutes
     next();
   } catch {
     res.status(401).json({ message: 'Invalid or expired token' });

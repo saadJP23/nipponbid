@@ -31,12 +31,18 @@ services:
       DB_NAME: autobid
       JWT_SECRET: change_this_to_a_secure_secret_in_production
       CLIENT_URL: http://localhost:5173
+      REDIS_URL: redis://redis:6379
+      ES_URL: http://elasticsearch:9200
     ports:
       - '5002:5000'
     volumes:
       - ./server/uploads:/app/uploads
     depends_on:
       db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
 
   client:
@@ -49,5 +55,38 @@ services:
     depends_on:
       - server
 
+  redis:
+    image: redis:7-alpine
+    container_name: nipponbid_redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: nipponbid_es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - '9200:9200'
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -s http://localhost:9200/_cluster/health | grep -q "green\|yellow"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   autobid_db_data:
+  redis_data:
+  es_data:
