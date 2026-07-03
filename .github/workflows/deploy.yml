@@ -77,7 +77,7 @@ jobs:
   # ──────────────────────────────────────────────────────────
   deploy:
     name: Deploy to minikube
-    runs-on: [self-hosted, saad-dev]   # targets your Mac runner by label
+    runs-on: [self-hosted, nipponbid]   # targets your Mac runner by label
     needs: build-and-push  # wait for images to be pushed first
 
     steps:
