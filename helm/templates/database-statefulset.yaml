@@ -60,12 +60,12 @@ spec:
             {{- toYaml .Values.database.resources | nindent 12 }}
           livenessProbe:
             exec:
-              command: ["mysqladmin", "ping", "-uroot", "-p$(MYSQL_ROOT_PASSWORD)"]
+              command: ["sh", "-c", "mysqladmin ping -uroot -p\"$MYSQL_ROOT_PASSWORD\""]
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             exec:
-              command: ["mysql", "-uroot", "-p$(MYSQL_ROOT_PASSWORD)", "-e", "SELECT 1"]
+              command: ["sh", "-c", "mysql -uroot -p\"$MYSQL_ROOT_PASSWORD\" -e 'SELECT 1'"]
             initialDelaySeconds: 10
             periodSeconds: 5
       volumes:
