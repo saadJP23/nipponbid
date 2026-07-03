@@ -1,7 +1,7 @@
 namespace: nipponbid
 
 frontend:
-  image: ghcr.io/saadjp23/nipponbid-frontend:latest
+  image: ghcr.io/saadjp23/nipponbid-frontend:latest  # owner must be lowercase
   imagePullPolicy: Always
   replicas: 2
   service:
