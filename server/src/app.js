@@ -20,7 +20,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (req, res) => res.json({
+  status: 'ok',
+  uptime: Math.floor(process.uptime()),
+  version: process.env.npm_package_version || '1.0.0',
+  env: process.env.NODE_ENV || 'development',
+}));
 
 app.get('/api/image-proxy', async (req, res) => {
   const url = req.query.url;
