@@ -9,7 +9,7 @@ const notify = async (userId, title, message, type, relatedId = null) => {
 };
 
 const genRefNo = async () => {
-  const [[{ max }]] = await db.query("SELECT MAX(CAST(SUBSTRING(ref_no, 4) AS UNSIGNED)) as max FROM remittances WHERE ref_no LIKE 'REM%'");
+  const [[{ max }]] = await db.query("SELECT MAX(CAST(SUBSTRING(ref_no, 4) AS INTEGER)) as max FROM remittances WHERE ref_no LIKE 'REM%'");
   return `REM${String((max || 0) + 1).padStart(5, '0')}`;
 };
 

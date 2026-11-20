@@ -8,74 +8,7 @@ const { normalizeDate } = require('../utils/dates');
 
 const SITE_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
-(async () => {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS japan_bids (
-      id         INT PRIMARY KEY AUTO_INCREMENT,
-      user_id    INT NOT NULL,
-      pid        VARCHAR(50) NOT NULL,
-      amount     DECIMAL(14,2) NOT NULL,
-      status     ENUM('pending','won','lost') NOT NULL DEFAULT 'pending',
-      admin_note TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_user_pid (user_id, pid),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      INDEX idx_pid    (pid),
-      INDEX idx_status (status)
-    )`);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS japan_purchases (
-      id                  INT PRIMARY KEY AUTO_INCREMENT,
-      user_id             INT NOT NULL,
-      bid_id              INT NOT NULL,
-      pid                 VARCHAR(50) NOT NULL,
-      pro_invoice_no      VARCHAR(50),
-      file_code           VARCHAR(50),
-      destination         VARCHAR(150),
-      bid_price           DECIMAL(14,2) DEFAULT 0,
-      auction_fee         DECIMAL(14,2) DEFAULT 0,
-      auction_commission  DECIMAL(14,2) DEFAULT 0,
-      transportation      DECIMAL(14,2) DEFAULT 0,
-      loading_custom      DECIMAL(14,2) DEFAULT 0,
-      commission          DECIMAL(14,2) DEFAULT 0,
-      tax_10pct           DECIMAL(14,2) DEFAULT 0,
-      radiation_photos    DECIMAL(14,2) DEFAULT 0,
-      custom_fee          DECIMAL(14,2) DEFAULT 0,
-      freight             DECIMAL(14,2) DEFAULT 0,
-      recycle             DECIMAL(14,2) DEFAULT 0,
-      total               DECIMAL(14,2) DEFAULT 0,
-      etd                 DATE,
-      ship_name           VARCHAR(200),
-      eta                 DATE,
-      route               VARCHAR(400),
-      result_of_inspection TEXT,
-      remarks             TEXT,
-      bl_status           VARCHAR(100),
-      created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (bid_id)  REFERENCES japan_bids(id) ON DELETE CASCADE,
-      INDEX idx_user_id (user_id),
-      INDEX idx_pid     (pid)
-    )`);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS japan_documents (
-      id          INT PRIMARY KEY AUTO_INCREMENT,
-      purchase_id INT NOT NULL,
-      type        VARCHAR(100),
-      name        VARCHAR(255),
-      file_path   VARCHAR(500) NOT NULL,
-      file_size   INT,
-      uploaded_by INT,
-      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (purchase_id) REFERENCES japan_purchases(id) ON DELETE CASCADE,
-      FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
-      INDEX idx_purchase_id (purchase_id)
-    )`);
-})().catch(e => console.error('shinchuo schema error:', e.message));
+// japan_bids / japan_purchases / japan_documents are created by database/postgres_schema.sql.
 
 async function getCar(pid) {
   const [rows] = await db.query('SELECT * FROM japan_cars WHERE pid = ?', [pid]);
@@ -116,9 +49,9 @@ router.get('/makes', async (req, res) => {
 router.get('/dates', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT DATE_FORMAT(auction_date, '%Y-%m-%d') AS date, COUNT(*) AS count
+      SELECT TO_CHAR(auction_date, 'YYYY-MM-DD') AS date, COUNT(*) AS count
       FROM japan_cars
-      WHERE auction_date >= CURDATE()
+      WHERE auction_date >= CURRENT_DATE
       GROUP BY date
       ORDER BY date ASC
     `);
@@ -172,12 +105,12 @@ router.post('/bids', auth, async (req, res) => {
     await db.query(
       `INSERT INTO japan_bids (user_id, pid, amount)
        VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE amount = VALUES(amount), status = 'pending', updated_at = NOW()`,
+       ON CONFLICT (user_id, pid) DO UPDATE SET amount = EXCLUDED.amount, status = 'pending', updated_at = NOW()`,
       [req.user.id, pid, amount],
     );
     const [rows] = await db.query('SELECT * FROM japan_bids WHERE user_id = ? AND pid = ?', [req.user.id, pid]);
 
-    const [users] = await db.query('SELECT name, email FROM users WHERE id = ?', [req.user.id]);
+    const [users] = await db.query('SELECT name, email FROM users WHERE user_id = ?', [req.user.id]);
     if (users.length) email.bidReceived(users[0].email, users[0].name, car, amount);
 
     res.status(201).json(rows[0]);
@@ -208,11 +141,11 @@ router.get('/bids', adminAuth, async (req, res) => {
     const offset = (+page - 1) * +limit;
     const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM japan_bids b WHERE ${where}`, params);
     const [rows] = await db.query(
-      `SELECT b.*, u.name as user_name, u.email as user_email, u.country as user_country, u.phone as user_phone,
+      `SELECT b.*, u.name as user_name, u.email as user_email, u.country as user_country, u.contact_number as user_phone,
               c.make, c.model, c.year, c.auction_house, c.auction_date,
               c.chassis, c.lot_number, c.image_url, c.start_price
        FROM japan_bids b
-       JOIN users u ON u.id = b.user_id
+       JOIN users u ON u.user_id = b.user_id
        JOIN japan_cars c ON c.pid = b.pid
        WHERE ${where}
        ORDER BY b.created_at DESC
@@ -232,7 +165,7 @@ router.get('/bids/export', adminAuth, async (req, res) => {
 
     const [rows] = await db.query(
       `SELECT b.id as bid_id, b.amount as bid_amount, b.status as bid_status, b.created_at,
-              u.name as user_name, u.email as user_email, u.phone as user_phone, u.country,
+              u.name as user_name, u.email as user_email, u.contact_number as user_phone, u.country,
               c.make, c.model, c.year, c.chassis, c.lot_number, c.auction_house, c.auction_date, c.start_price,
               p.id as purchase_id, p.pro_invoice_no, p.file_code, p.destination,
               p.bid_price, p.auction_fee, p.auction_commission, p.transportation,
@@ -242,7 +175,7 @@ router.get('/bids/export', adminAuth, async (req, res) => {
               p.result_of_inspection, p.remarks, p.bl_status, p.shipping_company,
               s.bl_code
        FROM japan_bids b
-       JOIN users u ON u.id = b.user_id
+       JOIN users u ON u.user_id = b.user_id
        JOIN japan_cars c ON c.pid = b.pid
        LEFT JOIN japan_purchases p ON p.bid_id = b.id
        LEFT JOIN shipments s ON s.file_code = p.file_code
@@ -382,7 +315,7 @@ router.put('/bids/:id', adminAuth, async (req, res) => {
 
     const [existing] = await db.query(
       `SELECT b.*, u.name as user_name, u.email as user_email FROM japan_bids b
-       JOIN users u ON u.id = b.user_id WHERE b.id = ?`, [req.params.id],
+       JOIN users u ON u.user_id = b.user_id WHERE b.id = ?`, [req.params.id],
     );
     if (!existing.length) return res.status(404).json({ message: 'Bid not found' });
     const bid = existing[0];
@@ -466,7 +399,7 @@ router.post('/purchases/manual', adminAuth, async (req, res) => {
               c.auction_date, c.image_url, u.name as user_name, u.email as user_email
        FROM japan_purchases p
        JOIN japan_cars c ON c.pid = p.pid
-       JOIN users u ON u.id = p.user_id
+       JOIN users u ON u.user_id = p.user_id
        WHERE p.id = ?`,
       [result.insertId],
     );
@@ -492,7 +425,7 @@ router.post('/purchases', adminAuth, async (req, res) => {
     );
 
     const car = await getCar(bid.pid);
-    const [users] = await db.query('SELECT name,email FROM users WHERE id=?', [bid.user_id]);
+    const [users] = await db.query('SELECT name,email FROM users WHERE user_id=?', [bid.user_id]);
     if (users.length && car) email.bidWon(users[0].email, users[0].name, car, bid.amount, SITE_URL);
 
     const [row] = await db.query('SELECT * FROM japan_purchases WHERE id=?', [result.insertId]);
@@ -1256,7 +1189,7 @@ router.get('/purchases', adminAuth, async (req, res) => {
               c.chassis, c.lot_number, c.image_url,
               (SELECT COUNT(*) FROM japan_documents d WHERE d.purchase_id = p.id) as doc_count
        FROM japan_purchases p
-       JOIN users u ON u.id = p.user_id
+       JOIN users u ON u.user_id = p.user_id
        JOIN japan_cars c ON c.pid = p.pid
        WHERE ${where}
        ORDER BY p.created_at DESC
@@ -1302,7 +1235,7 @@ router.get('/purchases/:id', auth, async (req, res) => {
               c.make, c.model, c.year, c.auction_house, c.auction_date,
               c.chassis, c.lot_number, c.image_url, c.grade
        FROM japan_purchases p
-       JOIN users u ON u.id = p.user_id
+       JOIN users u ON u.user_id = p.user_id
        JOIN japan_cars c ON c.pid = p.pid
        WHERE p.id = ? ${req.user.role !== 'admin' ? 'AND p.user_id = ?' : ''}`,
       req.user.role !== 'admin' ? [req.params.id, req.user.id] : [req.params.id],
@@ -1391,7 +1324,7 @@ router.put('/purchases/:id', adminAuth, async (req, res) => {
     const [row] = await db.query(
       `SELECT p.*, u.name as user_name, u.email as user_email,
               c.make, c.model, c.year, c.auction_house, c.chassis, c.lot_number
-       FROM japan_purchases p JOIN users u ON u.id=p.user_id
+       FROM japan_purchases p JOIN users u ON u.user_id=p.user_id
        JOIN japan_cars c ON c.pid=p.pid WHERE p.id=?`, [req.params.id],
     );
     if (!row.length) return res.status(404).json({ message: 'Purchase not found' });
@@ -1429,7 +1362,7 @@ router.post('/purchases/:id/documents', adminAuth, uploadDocument.single('docume
     const [p] = await db.query(
       `SELECT sp.*, u.name as user_name, u.email as user_email,
               c.make, c.model, c.year, c.chassis, c.lot_number, c.auction_house
-       FROM japan_purchases sp JOIN users u ON u.id=sp.user_id
+       FROM japan_purchases sp JOIN users u ON u.user_id=sp.user_id
        JOIN japan_cars c ON c.pid=sp.pid WHERE sp.id=?`, [req.params.id],
     );
     if (!p.length) return res.status(404).json({ message: 'Purchase not found' });
@@ -1548,7 +1481,7 @@ router.get('/parts-purchases/export', auth, async (req, res) => {
       'SELECT * FROM japan_parts_purchases WHERE user_id = ? ORDER BY purchased_date ASC, id ASC',
       [userId]
     );
-    const [[user]] = await db.query('SELECT name FROM users WHERE id=?', [userId]);
+    const [[user]] = await db.query('SELECT name FROM users WHERE user_id=?', [userId]);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'NipponBid';

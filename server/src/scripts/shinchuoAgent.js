@@ -324,44 +324,7 @@ function parseCarCards(html) {
   return cars;
 }
 
-async function ensureSchema() {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS japan_cars (
-      id            INT PRIMARY KEY AUTO_INCREMENT,
-      pid           VARCHAR(50) NOT NULL UNIQUE,
-      make          VARCHAR(100),
-      model         VARCHAR(200),
-      year          INT,
-      auction_house VARCHAR(200),
-      lot_number    VARCHAR(50),
-      chassis       VARCHAR(100),
-      mileage       INT,
-      cc            INT,
-      grade         VARCHAR(200),
-      auction_grade VARCHAR(20),
-      transmission  VARCHAR(20),
-      color         VARCHAR(50),
-      auction_date  DATE,
-      status        ENUM('upcoming','past','purchased') DEFAULT 'upcoming',
-      start_price   DECIMAL(14,2),
-      image_url     VARCHAR(500),
-      sheet_url     VARCHAR(500),
-      detail_url    VARCHAR(500),
-      extra_images  TEXT,
-      scraped_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_make         (make),
-      INDEX idx_model        (model),
-      INDEX idx_year         (year),
-      INDEX idx_auction_date (auction_date),
-      INDEX idx_status       (status)
-    )
-  `);
-
-  try {
-    await db.query(`ALTER TABLE japan_cars ADD COLUMN status ENUM('upcoming','past','purchased') DEFAULT 'upcoming' AFTER auction_date`);
-  } catch {  }
-}
+// japan_cars (including its `status` column) is created by database/postgres_schema.sql.
 
 async function upsertBatch(cars) {
   if (!cars.length) return;
@@ -372,11 +335,11 @@ async function upsertBatch(cars) {
   ];
   const ph      = cars.map(() => `(${cols.map(()=>'?').join(',')})`).join(',');
   const values  = cars.flatMap(c => cols.map(k => c[k] ?? null));
-  const updates = cols.filter(c=>c!=='pid').map(c=>`${c}=VALUES(${c})`).join(',');
+  const updates = cols.filter(c=>c!=='pid').map(c=>`${c}=EXCLUDED.${c}`).join(',');
 
   await db.query(
     `INSERT INTO japan_cars (${cols.join(',')}) VALUES ${ph}
-     ON DUPLICATE KEY UPDATE ${updates}, updated_at=NOW()`,
+     ON CONFLICT (pid) DO UPDATE SET ${updates}, updated_at=NOW()`,
     values,
   );
 }
@@ -385,7 +348,7 @@ async function cleanupPastCars() {
   const [res] = await db.query(
     `UPDATE japan_cars
      SET status = 'past'
-     WHERE auction_date < CURDATE()
+     WHERE auction_date < CURRENT_DATE
        AND status = 'upcoming'`,
   );
   if (res.affectedRows > 0) console.log(`🧹 Marked ${res.affectedRows} cars as past`);
@@ -401,8 +364,6 @@ async function run() {
   console.log(`\n╔══════════════════════════════════════════════╗`);
   console.log(`║  NipponBid Shinchuo Agent — ${new Date().toISOString().slice(0,10)}     ║`);
   console.log(`╚══════════════════════════════════════════════╝\n`);
-
-  await ensureSchema();
 
   if (cleanupOnly) {
     await cleanupPastCars();

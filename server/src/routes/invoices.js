@@ -7,12 +7,12 @@ const notify = async (userId, title, message, type, relatedId = null) => {
 };
 
 const genProformaNo = async () => {
-  const [[{ max }]] = await db.query("SELECT MAX(CAST(SUBSTRING(invoice_no, 5) AS UNSIGNED)) as max FROM proforma_invoices WHERE invoice_no LIKE 'PRO-%'");
+  const [[{ max }]] = await db.query("SELECT MAX(CAST(SUBSTRING(invoice_no, 5) AS INTEGER)) as max FROM proforma_invoices WHERE invoice_no LIKE 'PRO-%'");
   return `PRO-${String((max || 0) + 1).padStart(5, '0')}`;
 };
 
 const genFinalNo = async () => {
-  const [[{ max }]] = await db.query("SELECT MAX(CAST(SUBSTRING(invoice_no, 6) AS UNSIGNED)) as max FROM final_invoices WHERE invoice_no LIKE 'FINV-%'");
+  const [[{ max }]] = await db.query("SELECT MAX(CAST(SUBSTRING(invoice_no, 6) AS INTEGER)) as max FROM final_invoices WHERE invoice_no LIKE 'FINV-%'");
   return `FINV-${String((max || 0) + 1).padStart(5, '0')}`;
 };
 

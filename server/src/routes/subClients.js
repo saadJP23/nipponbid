@@ -63,7 +63,7 @@ router.get('/', adminAuth, async (req, res) => {
     if (user_id) { where += ' AND sc.user_id = ?'; params.push(user_id); }
     const [rows] = await db.query(
       `SELECT sc.*, u.name as owner_name, u.email as owner_email
-       FROM sub_clients sc JOIN users u ON u.id = sc.user_id
+       FROM sub_clients sc JOIN users u ON u.user_id = sc.user_id
        WHERE ${where} ORDER BY u.name, sc.name`,
       params
     );

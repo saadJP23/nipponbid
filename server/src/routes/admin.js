@@ -77,7 +77,7 @@ router.get('/stats', adminAuth, async (req, res) => {
       `SELECT COUNT(*) AS in_transit_count FROM shipping s
        JOIN purchases p ON p.purchase_id = s.purchase_id
        JOIN users u ON u.user_id = p.user_id
-       WHERE s.eta > CURDATE() AND ${pWhere.join(' AND ')}`, pParams
+       WHERE s.eta > CURRENT_DATE AND ${pWhere.join(' AND ')}`, pParams
     );
 
     // Recent purchases
@@ -104,10 +104,10 @@ router.get('/stats', adminAuth, async (req, res) => {
     // Monthly billed
     const monthlyWhere = [...pWhere, 'p.auction_date IS NOT NULL'];
     if (!date_from && !date_to) {
-      monthlyWhere.push("p.auction_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')");
+      monthlyWhere.push("p.auction_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '11 months')");
     }
     const [monthly_billed] = await db.query(
-      `SELECT DATE_FORMAT(p.auction_date, '%Y-%m') AS month,
+      `SELECT TO_CHAR(p.auction_date, 'YYYY-MM') AS month,
               COALESCE(SUM(
                 CASE WHEN u.type = 'dealer'
                   THEN COALESCE(pd.bid_price,0) + COALESCE(pd.others,0) + COALESCE(pd.dealer_fee,0)
@@ -124,11 +124,11 @@ router.get('/stats', adminAuth, async (req, res) => {
 
     // Monthly received
     const [monthly_received] = await db.query(
-      `SELECT DATE_FORMAT(r.tt_date, '%Y-%m') AS month,
+      `SELECT TO_CHAR(r.tt_date, 'YYYY-MM') AS month,
               COALESCE(SUM(r.deposit_amount), 0) AS received, COUNT(*) AS payments
        FROM remittances r ${remJoin}
        WHERE ${remWhere.join(' AND ')}
-         AND r.tt_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
+         AND r.tt_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '11 months')
        GROUP BY month ORDER BY month ASC`, remParams
     );
 
@@ -152,7 +152,7 @@ router.get('/stats', adminAuth, async (req, res) => {
        JOIN cars c ON c.car_id = p.car_id
        JOIN users u ON u.user_id = p.user_id
        JOIN shipping s ON s.purchase_id = p.purchase_id
-       WHERE s.eta > CURDATE() AND ${pWhere.join(' AND ')}
+       WHERE s.eta > CURRENT_DATE AND ${pWhere.join(' AND ')}
        ORDER BY s.eta ASC LIMIT 20`, pParams
     );
 
@@ -352,13 +352,6 @@ router.post('/notify', adminAuth, async (req, res) => {
 // ── Settings (dealer_fee, etc.) ──────────────────────────────────────────────
 router.get('/settings', adminAuth, async (req, res) => {
   try {
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key_name VARCHAR(100) PRIMARY KEY,
-        value    VARCHAR(255) NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `);
     const [rows] = await db.query('SELECT key_name, value FROM settings');
     const obj = {};
     rows.forEach(r => { obj[r.key_name] = r.value; });
@@ -369,19 +362,12 @@ router.get('/settings', adminAuth, async (req, res) => {
 
 router.put('/settings', adminAuth, async (req, res) => {
   try {
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key_name VARCHAR(100) PRIMARY KEY,
-        value    VARCHAR(255) NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `);
     const allowed = ['dealer_fee'];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
         await db.query(
-          'INSERT INTO settings (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?',
-          [key, String(req.body[key]), String(req.body[key])]
+          'INSERT INTO settings (key_name, value) VALUES (?, ?) ON CONFLICT (key_name) DO UPDATE SET value = EXCLUDED.value',
+          [key, String(req.body[key])]
         );
       }
     }

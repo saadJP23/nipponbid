@@ -269,38 +269,7 @@ class ShinchuoSession {
   }
 }
 
-async function ensureTable() {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS japan_cars (
-      id            INT PRIMARY KEY AUTO_INCREMENT,
-      pid           VARCHAR(50) NOT NULL UNIQUE,
-      make          VARCHAR(100),
-      model         VARCHAR(200),
-      year          INT,
-      auction_house VARCHAR(200),
-      lot_number    VARCHAR(50),
-      chassis       VARCHAR(100),
-      mileage       INT,
-      cc            INT,
-      grade         VARCHAR(200),
-      auction_grade VARCHAR(20),
-      transmission  VARCHAR(20),
-      color         VARCHAR(50),
-      auction_date  DATE,
-      start_price   DECIMAL(14,2),
-      image_url     VARCHAR(500),
-      sheet_url     VARCHAR(500),
-      detail_url    VARCHAR(500),
-      extra_images  TEXT,
-      scraped_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_make (make),
-      INDEX idx_model (model),
-      INDEX idx_year (year),
-      INDEX idx_auction_date (auction_date)
-    )
-  `);
-}
+// japan_cars is created by database/postgres_schema.sql.
 
 async function upsertBatch(cars) {
   if (!cars.length) return;
@@ -312,11 +281,11 @@ async function upsertBatch(cars) {
   const placeholders = cars.map(() => `(${cols.map(() => '?').join(',')})`).join(',');
   const values = cars.flatMap(c => cols.map(k => c[k] ?? null));
   const updateCols = cols.filter(c => c !== 'pid')
-    .map(c => `${c}=VALUES(${c})`).join(',');
+    .map(c => `${c}=EXCLUDED.${c}`).join(',');
 
   await db.query(
     `INSERT INTO japan_cars (${cols.join(',')}) VALUES ${placeholders}
-     ON DUPLICATE KEY UPDATE ${updateCols}, updated_at=NOW()`,
+     ON CONFLICT (pid) DO UPDATE SET ${updateCols}, updated_at=NOW()`,
     values,
   );
 }
@@ -330,8 +299,6 @@ async function main() {
   console.log(`\n🚗 NipponBid ↔ Shinchuo Scraper`);
   console.log(`   Fetch details: ${fetchDetails}`);
   console.log(`   Max pages: ${maxPages === Infinity ? 'all' : maxPages}\n`);
-
-  await ensureTable();
 
   const session = new ShinchuoSession();
   await session.login();

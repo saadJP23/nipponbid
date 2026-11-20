@@ -32,7 +32,7 @@ const buildLedger = async (userId) => {
   const [remRows] = await db.query(
     `SELECT 'remittance' AS entry_type,
             ref_no AS ref,
-            IFNULL(sender_name, ref_no) AS description,
+            COALESCE(sender_name, ref_no) AS description,
             deposit_amount AS credit, 0 AS debit,
             COALESCE(tt_date, DATE(confirmed_at), DATE(created_at)) AS entry_date,
             remittance_id AS source_id
@@ -44,7 +44,7 @@ const buildLedger = async (userId) => {
   const [purchaseRows] = await db.query(
     `SELECT 'purchase' AS entry_type,
             CONCAT('P-', p.purchase_id) AS ref,
-            CONCAT('Car Purchase - ', c.make, ' ', c.model, ' ', IFNULL(c.year,''), ' (', IFNULL(c.chassis_no,''), ')') AS description,
+            CONCAT('Car Purchase - ', c.make, ' ', c.model, ' ', COALESCE(c.year::text,''), ' (', COALESCE(c.chassis_no,''), ')') AS description,
             0 AS credit,
             pd.bid_price, pd.auction_charges, pd.transportation, pd.loading_custom,
             pd.others_commission, pd.radiation_photos, pd.custom_fee, pd.freight,

@@ -230,7 +230,11 @@ router.post('/:id/images', adminAuth, uploadCarImages.array('images', 20), async
 
     const paths = await resolveUploadedFiles(files, 'nipponbid/car-images');
     const values = paths.map((p, i) => [id, p, p, i === 0 && hasPrimary ? 1 : 0, i]);
-    await db.query('INSERT INTO car_images (car_id, image_path, url, is_primary, sort_order) VALUES ?', [values]);
+    const placeholders = values.map(() => '(?, ?, ?, ?, ?)').join(', ');
+    await db.query(
+      `INSERT INTO car_images (car_id, image_path, url, is_primary, sort_order) VALUES ${placeholders}`,
+      values.flat()
+    );
     if (setPrimary && setPrimary !== '0') {
       await db.query('UPDATE car_images SET is_primary = 0 WHERE car_id = ?', [id]);
       await db.query('UPDATE car_images SET is_primary = 1 WHERE car_id = ? AND sort_order = 0', [id]);

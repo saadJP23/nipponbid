@@ -5,7 +5,7 @@ const db = require('../config/database');
 
 async function getWeekStartCutoff() {
   const [[row]] = await db.query(
-    `SELECT DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AS cutoff`
+    `SELECT DATE_TRUNC('week', CURRENT_DATE)::date AS cutoff`
   );
   return row.cutoff;
 }
@@ -16,8 +16,8 @@ async function cleanupOldCars(dryRun = false) {
   const [[{ total, purchased, deletable }]] = await db.query(`
     SELECT
       COUNT(*)                                                              AS total,
-      SUM(pid IN (SELECT pid FROM japan_purchases))                     AS purchased,
-      SUM(pid NOT IN (SELECT pid FROM japan_purchases))                 AS deletable
+      SUM(CASE WHEN pid IN (SELECT pid FROM japan_purchases) THEN 1 ELSE 0 END)     AS purchased,
+      SUM(CASE WHEN pid NOT IN (SELECT pid FROM japan_purchases) THEN 1 ELSE 0 END) AS deletable
     FROM japan_cars
     WHERE auction_date < ?
   `, [cutoff]);

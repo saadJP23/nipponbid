@@ -20,7 +20,7 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/:carId', auth, async (req, res) => {
   try {
-    await db.query('INSERT IGNORE INTO watchlist (user_id, car_id) VALUES (?, ?)', [req.user.id, req.params.carId]);
+    await db.query('INSERT INTO watchlist (user_id, car_id) VALUES (?, ?) ON CONFLICT (user_id, car_id) DO NOTHING', [req.user.id, req.params.carId]);
     res.json({ message: 'Added to watchlist' });
   } catch (err) {
     res.status(500).json({ message: err.message });
