@@ -285,6 +285,26 @@ router.post('/:id/documents', adminAuth, uploadDocument.single('document'), asyn
   }
 });
 
+router.delete('/:id', adminAuth, async (req, res) => {
+  try {
+    const [purchase] = await db.query('SELECT car_id FROM purchases WHERE purchase_id = ?', [req.params.id]);
+    if (!purchase.length) return res.status(404).json({ message: 'Purchase not found' });
+    const carId = purchase[0].car_id;
+
+    await db.query('DELETE FROM purchases WHERE purchase_id = ?', [req.params.id]);
+
+    // Only remove the car if no other purchase still references it
+    const [[{ count }]] = await db.query('SELECT COUNT(*) as count FROM purchases WHERE car_id = ?', [carId]);
+    if (Number(count) === 0) {
+      await db.query('DELETE FROM cars WHERE car_id = ?', [carId]);
+    }
+
+    res.json({ message: 'Purchase deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.delete('/:purchaseId/documents/:docId', adminAuth, async (req, res) => {
   try {
     await db.query('DELETE FROM documents WHERE document_id = ? AND purchase_id = ?', [req.params.docId, req.params.purchaseId]);

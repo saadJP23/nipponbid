@@ -71,6 +71,7 @@ export const getPurchaseNextMeta = (user_id) => api.get('/purchases/next-meta', 
 export const updateShipping = (id, data) => api.put(`/purchases/${id}/shipping`, data);
 export const uploadDocument = (id, formData) => api.post(`/purchases/${id}/documents`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const deleteDocument = (purchaseId, docId) => api.delete(`/purchases/${purchaseId}/documents/${docId}`);
+export const deletePurchase = (id) => api.delete(`/purchases/${id}`);
 
 export const submitPart = (data) => api.post('/parts', data);
 export const adminCreatePart = (data) => api.post('/parts/admin-create', data);

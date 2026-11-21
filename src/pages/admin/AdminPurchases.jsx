@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllPurchases, getPurchase, updatePurchase, createPurchase, createCar, createAuction, getAuctions, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers, getPurchaseNextMeta } from '../../services/api'
+import { getAllPurchases, getPurchase, updatePurchase, deletePurchase, createPurchase, createCar, createAuction, getAuctions, uploadDocument, deleteDocument, resolveImageUrl, getAdminUsers, getPurchaseNextMeta } from '../../services/api'
 import { ShoppingBag, ChevronLeft, ChevronRight, Upload, Trash2, FileText, Save, ChevronDown, Plus, RefreshCw, Search, X } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
@@ -330,6 +330,16 @@ export default function AdminPurchases() {
     } catch { toast.error('Failed') }
   }
 
+  const handleDeletePurchase = async (e, p) => {
+    e.stopPropagation()
+    if (!window.confirm(`Delete the purchase record for ${p.year} ${p.make} ${p.model} (${p.chassis_no})? This cannot be undone.`)) return
+    try {
+      await deletePurchase(p.purchase_id)
+      toast.success('Purchase deleted')
+      load(page, userFilter, search)
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to delete') }
+  }
+
   return (
     <>
       <div className="space-y-4 animate-slide-up">
@@ -399,6 +409,7 @@ export default function AdminPurchases() {
                   <th>Date</th>
                   <th>Total</th>
                   <th>Invoice No.</th>
+                  <th></th>
                 </tr></thead>
                 <tbody>
                   {purchases.map(p => (
@@ -424,6 +435,15 @@ export default function AdminPurchases() {
                       <td>{fmtDate(p.auction_date)}</td>
                       <td className="font-mono font-semibold">¥ {fmt(p.purchase_total)}</td>
                       <td className="font-mono text-xs">{p.pro_invoice_no || '—'}</td>
+                      <td>
+                        <button
+                          className="btn-icon text-grey-400 hover:text-red"
+                          title="Delete purchase"
+                          onClick={(e) => handleDeletePurchase(e, p)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
