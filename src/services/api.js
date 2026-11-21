@@ -101,6 +101,7 @@ export const sendNotification = (data) => api.post('/admin/notify', data);
 export const addRemittance = (formData) => api.post('/remittances', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const getMyRemittances = (params) => api.get('/remittances/my', { params });
 export const getAllRemittances = (params) => api.get('/remittances', { params });
+export const updateRemittance  = (id, data) => api.put(`/remittances/${id}`, data);
 export const confirmRemittance = (id, data) => api.put(`/remittances/${id}/confirm`, data);
 export const deleteRemittance      = (id)     => api.delete(`/remittances/${id}`);
 export const adminCreateRemittance = (data)   => api.post('/remittances/admin-create', data);
@@ -110,7 +111,9 @@ export const saveSearch = (data) => api.post('/saved-searches', data);
 export const deleteSavedSearch = (id) => api.delete(`/saved-searches/${id}`);
 
 export const getMyShipments = (params) => api.get('/shipments/my', { params });
-export const getAllShipments    = ()          => api.get('/shipments');
+export const getAllShipments    = (params)    => api.get('/shipments', { params });
+export const getShipment        = (id)        => api.get(`/shipments/${id}`);
+export const deleteShipmentDoc  = (id, docId) => api.delete(`/shipments/${id}/document/${docId}`);
 export const getShipmentByFileCode = (fc)    => api.get('/shipments/by-file-code', { params: { file_code: fc } });
 function withShipmentDates(data) {
   if (!data) return data;
@@ -130,7 +133,6 @@ function withBLDates(data) {
   };
 }
 
-export const createShipment    = (data)      => api.post('/shipments', withShipmentDates(data));
 export const updateShipment    = (id, data)  => api.put(`/shipments/${id}`, withShipmentDates(data));
 export const getBLRequests     = (params)    => api.get('/shipments/bl-requests', { params });
 export const createBLRequest   = (data)      => api.post('/shipments/bl-requests', withBLDates(data));

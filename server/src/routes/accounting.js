@@ -12,23 +12,27 @@ const getDealerFee = async () => {
   } catch { return 100000; }
 };
 
-const calcTotal = (pd, userType) => {
-  const n = (v) => Math.round(Number(v) || 0);
-  if (userType === 'dealer') {
-    return n(pd.bid_price) + n(pd.others) + n(pd.dealer_fee);
-  }
-  // ordinary: bid + auction_charges + transportation + loading_custom + others_commission + radiation_photos + custom_fee + freight
-  return n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
-         n(pd.loading_custom) + n(pd.others_commission) + n(pd.radiation_photos) +
-         n(pd.custom_fee) + n(pd.freight);
-};
+const n = (v) => Math.round(Number(v) || 0);
 
-const buildLedger = async (userId) => {
-  const [[userRow]] = await db.query('SELECT type FROM users WHERE user_id = ?', [userId]);
-  const userType = userRow?.type || 'ordinary';
-  const dealerFee = await getDealerFee();
+// Dealer purchase cost: flat per-car fee model — the dealer fee is assumed to cover
+// auction/transport/customs costs, so only bid price, dealer fee and others count.
+const calcDealerPurchaseTotal = (pd) => n(pd.bid_price) + n(pd.dealer_fee) + n(pd.others);
 
-  // Credits — confirmed remittances
+// Agent purchase cost: every line item billed individually, including tax and recycle.
+const calcAgentPurchaseTotal = (pd) =>
+  n(pd.third_party_fee) + n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
+  n(pd.loading_custom) + n(pd.tax_10_percent) + n(pd.radiation_photos) + n(pd.custom_fee) +
+  n(pd.freight) + n(pd.recycle) + n(pd.others);
+
+// Ordinary client-billed total: Tax and Recycle are NOT billed to ordinary clients as separate
+// line items, but their manually-entered NipponBid Commission is included in what they owe.
+const calcOrdinaryPurchaseTotal = (pd) =>
+  n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
+  n(pd.loading_custom) + n(pd.radiation_photos) + n(pd.custom_fee) + n(pd.freight) +
+  n(pd.others) + (n(pd.nipponbid_commission) - n(pd.third_party_fee));
+
+// Credits — confirmed remittances. Same for every customer type.
+const fetchRemittanceCredits = async (userId) => {
   const [remRows] = await db.query(
     `SELECT 'remittance' AS entry_type,
             ref_no AS ref,
@@ -39,8 +43,12 @@ const buildLedger = async (userId) => {
      FROM remittances WHERE user_id = ? AND status = 'confirmed'`,
     [userId]
   );
+  return remRows;
+};
 
-  // Debits — all car purchases (LEFT JOIN so purchases without cost details are included with 0 debit)
+// Raw car-purchase rows (LEFT JOIN so purchases without cost details are included with 0 debit).
+// Same query for every customer type — only the debit formula applied to these rows differs.
+const fetchPurchaseRows = async (userId) => {
   const [purchaseRows] = await db.query(
     `SELECT 'purchase' AS entry_type,
             CONCAT('P-', p.purchase_id) AS ref,
@@ -58,16 +66,11 @@ const buildLedger = async (userId) => {
      WHERE p.user_id = ?`,
     [userId]
   );
+  return purchaseRows;
+};
 
-  const purchaseRowsMapped = purchaseRows.map(r => ({
-    ...r,
-    debit: calcTotal(r, userType),
-    bid_price:  Math.round(Number(r.bid_price)  || 0),
-    others:     Math.round(Number(r.others)     || 0),
-    commission: userType === 'dealer' ? Math.round(Number(r.dealer_fee) || 0) : Math.round(Number(r.others_commission) || 0),
-  }));
-
-  // Debits — parts purchases (fetch individual fields so rounding matches Excel)
+// Debits — parts purchases. Same for every customer type.
+const fetchPartsDebits = async (userId) => {
   const [partsRowsRaw] = await db.query(
     `SELECT 'parts' AS entry_type,
             CONCAT('PART-', parts_purchase_id) AS ref,
@@ -80,21 +83,75 @@ const buildLedger = async (userId) => {
      WHERE user_id = ? AND bid_price IS NOT NULL AND bid_price > 0`,
     [userId]
   );
-  const partsRows = partsRowsRaw.map(r => ({
+  return partsRowsRaw.map(r => ({
     ...r,
-    debit: Math.round(Number(r.bid_price) || 0) + Math.round(Number(r.delivery_charges) || 0) + Math.round(Number(r.commission) || 0),
+    debit: n(r.bid_price) + n(r.delivery_charges) + n(r.commission),
   }));
+};
 
+// Merges credit/debit rows in date order and runs a cumulative balance over them.
+const assembleLedger = (remRows, purchaseRowsMapped, partsRows) => {
   const entries = [...remRows, ...purchaseRowsMapped, ...partsRows]
     .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date));
 
   let balance = 0;
   return entries.map(e => {
-    const credit = Math.round(Number(e.credit) || 0);
-    const debit  = Math.round(Number(e.debit)  || 0);
-    balance = Math.round(balance + credit - debit);
+    const credit = n(e.credit);
+    const debit  = n(e.debit);
+    balance = n(balance + credit - debit);
     return { ...e, credit, debit, balance };
   });
+};
+
+const buildDealerLedger = async (userId) => {
+  const [remRows, purchaseRows, partsRows] = await Promise.all([
+    fetchRemittanceCredits(userId), fetchPurchaseRows(userId), fetchPartsDebits(userId),
+  ]);
+  const purchaseRowsMapped = purchaseRows.map(r => ({
+    ...r,
+    debit: calcDealerPurchaseTotal(r),
+    bid_price:  n(r.bid_price),
+    others:     n(r.others),
+    commission: n(r.dealer_fee),
+  }));
+  return assembleLedger(remRows, purchaseRowsMapped, partsRows);
+};
+
+const buildAgentLedger = async (userId) => {
+  const [remRows, purchaseRows, partsRows] = await Promise.all([
+    fetchRemittanceCredits(userId), fetchPurchaseRows(userId), fetchPartsDebits(userId),
+  ]);
+  const purchaseRowsMapped = purchaseRows.map(r => ({
+    ...r,
+    debit: calcAgentPurchaseTotal(r),
+    bid_price:  n(r.bid_price),
+    others:     n(r.others),
+    commission: n(r.others_commission),
+  }));
+  return assembleLedger(remRows, purchaseRowsMapped, partsRows);
+};
+
+const buildOrdinaryLedger = async (userId) => {
+  const [remRows, purchaseRows, partsRows] = await Promise.all([
+    fetchRemittanceCredits(userId), fetchPurchaseRows(userId), fetchPartsDebits(userId),
+  ]);
+  const purchaseRowsMapped = purchaseRows.map(r => ({
+    ...r,
+    debit: calcOrdinaryPurchaseTotal(r),
+    bid_price:  n(r.bid_price),
+    others:     n(r.others),
+    commission: n(r.nipponbid_commission),
+  }));
+  return assembleLedger(remRows, purchaseRowsMapped, partsRows);
+};
+
+// Checks the customer's type first, then delegates to the matching builder.
+const buildLedger = async (userId) => {
+  const [[userRow]] = await db.query('SELECT type FROM users WHERE user_id = ?', [userId]);
+  const userType = userRow?.type || 'ordinary';
+  if (userType === 'dealer') return buildDealerLedger(userId);
+  if (userType === 'agent')  return buildAgentLedger(userId);
+  return buildOrdinaryLedger(userId);
 };
 
 router.get('/my', auth, async (req, res) => {
@@ -156,7 +213,9 @@ async function buildAccountExcel(userId, adminView = false) {
   // Override total with the correct formula for this user type
   const purchases = purchasesRaw.map(p => ({
     ...p,
-    computed_total: calcTotal(p, userType),
+    computed_total: userType === 'dealer' ? calcDealerPurchaseTotal(p)
+                   : userType === 'agent'  ? calcAgentPurchaseTotal(p)
+                   : calcOrdinaryPurchaseTotal(p),
   }));
 
   // Shipment details (bl_status lives in the bl table, not shipping)
@@ -460,9 +519,11 @@ async function buildAccountExcel(userId, adminView = false) {
   };
 
   const writeBalFormula = (row, rowNum, computedBal) => {
-    const prevRef = rowNum === FIRST_ROW ? '0' : `${balCol}${rowNum - 1}`;
+    const isFirst = rowNum === FIRST_ROW;
+    const prevRef = isFirst ? '0' : `${balCol}${rowNum - 1}`;
+    const op = isFirst ? '+' : '-'; // first row of a block: "0-(TOTAL+DEBIT)"; every row after: "PREV-(TOTAL-DEBIT)"
     const cell = row.getCell(balColNum);
-    cell.value = { formula: `=${prevRef}-(N(${totCol}${rowNum})-N(${debCol}${rowNum}))`, result: computedBal };
+    cell.value = { formula: `=${prevRef}-(N(${totCol}${rowNum})${op}N(${debCol}${rowNum}))`, result: computedBal };
   };
 
   for (const item of allRows) {
@@ -578,13 +639,13 @@ async function buildAccountExcel(userId, adminView = false) {
   const det = wb.addWorksheet('Details');
   det.columns = [
     { width: 5  }, { width: 12 }, { width: 20 }, { width: 8  }, { width: 17 },
-    { width: 22 }, { width: 16 }, { width: 14 }, { width: 12 },
+    { width: 22 }, { width: 16 }, { width: 14 },
     { width: 12 }, { width: 20 }, { width: 12 }, { width: 22 },
     { width: 18 }, { width: 20 }, { width: 12 },
   ];
 
   // Title
-  det.mergeCells('A1:P1');
+  det.mergeCells('A1:O1');
   const dTitle = det.getCell('A1');
   dTitle.value = 'AUTO BID 株式会社  ·  SHIPPING & EXTENDED DETAILS';
   dTitle.font  = { name: 'Arial', size: 14, bold: true, color: { argb: C.headerText } };
@@ -596,7 +657,7 @@ async function buildAccountExcel(userId, adminView = false) {
   det.getCell('A2').value = `  Client: ${user.name}   ·   ${purchases.length} cars`;
   det.getCell('A2').font  = boldFont(11, C.headerText);
   det.getCell('A2').fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subHeaderBg } };
-  det.mergeCells('I2:P2');
+  det.mergeCells('I2:O2');
   det.getCell('I2').value = '← Match the NO. column with the "Data" sheet for cost breakdown  ';
   det.getCell('I2').font  = normFont(9, 'FF2563EB');
   det.getCell('I2').fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subHeaderBg } };
@@ -606,7 +667,7 @@ async function buildAccountExcel(userId, adminView = false) {
   const DET_HEADERS = [
     'NO.','AUC DATE','AUC NAME','LOT NO','CHASSIS NO',
     'DESTINATION','PRO-INVOICE NO.','FILE CODE NO',
-    'AUCTION\nCOMMISSION','ETD','SHIP NAME','ETA',
+    'ETD','SHIP NAME','ETA',
     'ROUTE','RESULT OF\nINSPECTION','REMARKS','BL STATUS'
   ];
   const dhRow = det.getRow(3);
@@ -629,7 +690,6 @@ async function buildAccountExcel(userId, adminView = false) {
       i + 1, fmtDate(p.auction_date), p.auction_name || '',
       p.lot_no || '', p.chassis_no || '',
       p.destination || '', p.pro_invoice_no || '', p.file_code_no || '',
-      n(p.auction_charges),
       fmtDate(ship.etd), ship.ship_name || '',
       fmtDate(ship.eta), ship.route || '',
       ship.result_of_inspection || '', p.remarks || '',
@@ -640,27 +700,10 @@ async function buildAccountExcel(userId, adminView = false) {
       c.value = intVal(v);
       c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
       c.font  = normFont(9);
-      if (j === 8) c.numFmt = YEN;
-      c.alignment = { vertical: 'middle', horizontal: j === 8 ? 'right' : 'left' };
+      c.alignment = { vertical: 'middle', horizontal: 'left' };
       c.border = allBorder();
     });
   });
-
-  // Grand total row
-  const gtRow = det.getRow(4 + purchases.length);
-  gtRow.height = 18;
-  det.mergeCells(`A${4+purchases.length}:H${4+purchases.length}`);
-  const gtLabel = gtRow.getCell(1);
-  gtLabel.value = 'GRAND TOTAL';
-  gtLabel.font  = boldFont(10, C.headerText);
-  gtLabel.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.headerBg } };
-  gtLabel.alignment = { horizontal: 'center', vertical: 'middle' };
-  const gtVal = gtRow.getCell(9);
-  gtVal.value  = purchases.reduce((s, p) => s + n(p.auction_charges), 0);
-  gtVal.numFmt = YEN;
-  gtVal.font   = boldFont(10, C.headerText);
-  gtVal.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.headerBg } };
-  gtVal.alignment = { horizontal: 'right', vertical: 'middle' };
 
   det.views = [{ state: 'frozen', ySplit: 3 }];
 
@@ -738,10 +781,10 @@ router.get('/export', adminAuth, async (req, res) => {
 router.get('/export-all', adminAuth, async (req, res) => {
   try {
     const [users] = await db.query(
-      "SELECT user_id, name FROM users WHERE role = 'user' ORDER BY name"
+      "SELECT user_id, name, type, country FROM users WHERE role = 'user' ORDER BY type, name"
     );
 
-    // Build one combined workbook — one Data+Details sheet pair per user
+    // Build one combined workbook — sheets grouped by customer type, not one set per customer
     const wb = new ExcelJS.Workbook();
     wb.creator = 'NipponBid';
 
@@ -788,6 +831,44 @@ router.get('/export-all', adminAuth, async (req, res) => {
     let grandBilled = 0, grandReceived = 0;
     const summaryRows = [];
 
+    // One destination sheet per (type, sheet-name) pair — e.g. "Dealer - Data" — that every
+    // customer of that type gets appended into, one block after another, instead of each
+    // customer getting their own separate set of sheets.
+    const typeSheets = {};
+
+    // Data/Details sheets stack many customers' rows together, so each gets a CLIENT column
+    // instead of the old single "Client: Name" banner row (which only identified one block,
+    // and got lost once rows are scrolled/sorted/filtered). bannerRow is skipped entirely
+    // (left blank) since the CLIENT column now carries that information on every row instead.
+    // Current Bill isn't included here — it's already one short, self-contained block per
+    // customer, so the row-ambiguity problem these rules solve doesn't apply to it.
+    const SHEET_RULES = {
+      'Data':    { bannerRow: 2, headerRow: 12, dataFrom: 13 },
+      'Details': { bannerRow: 2, headerRow: 3,  dataFrom: 4  },
+    };
+
+    // Parses "A1:V1" into numeric {c1,r1,c2,r2} so a merge can be translated by a column/row
+    // offset when re-created in the destination sheet.
+    const colLetterToNum = (letters) => {
+      let n = 0;
+      for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+      return n;
+    };
+    const parseRange = (rangeStr) => {
+      const m = rangeStr.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+      if (!m) return null;
+      return { c1: colLetterToNum(m[1]), r1: +m[2], c2: colLetterToNum(m[3]), r2: +m[4] };
+    };
+
+    // Translates cell references inside a formula string (e.g. "T13") by the same
+    // column/row offset used to physically place that cell in the destination sheet —
+    // otherwise a copied formula keeps pointing at its old (now wrong) position.
+    const shiftFormula = (formula, colShift, rowShift) =>
+      formula.replace(/([A-Z]+)(\d+)/g, (_, col, rowDigits) => {
+        const newCol = colShift ? String.fromCharCode(col.charCodeAt(0) + colShift) : col;
+        return `${newCol}${Number(rowDigits) + rowShift}`;
+      });
+
     for (const u of users) {
       const ledger = await buildLedger(u.user_id);
       const totalCredit = ledger.reduce((s, e) => s + e.credit, 0);
@@ -797,29 +878,76 @@ router.get('/export-all', adminAuth, async (req, res) => {
       grandReceived += totalCredit;
       summaryRows.push({ ...u, totalDebit, totalCredit, balance });
 
-      // Build per-user workbook and copy sheets into combined wb
+      const typeLabel = (u.type || 'ordinary').replace(/^\w/, c => c.toUpperCase());
+
+      // Build per-user workbook, then append each of its sheets into the shared type-sheet
       const userWb = await buildAccountExcel(u.user_id, true);
       for (const wsName of userWb.worksheets.map(w => w.name)) {
-        const srcWs  = userWb.getWorksheet(wsName);
-        const label  = `${u.name.replace(/[^a-zA-Z0-9 ]/g,'').slice(0,20)} - ${wsName}`;
-        const destWs = wb.addWorksheet(label);
+        if (wsName === 'Current Bill') continue; // not included in the grouped-by-type export
+        const srcWs = userWb.getWorksheet(wsName);
+        const rules = SHEET_RULES[wsName];
+        const colShift = rules ? 1 : 0;
+        const srcMerges = ((srcWs.model && srcWs.model.merges) || []).map(parseRange).filter(Boolean);
+        const key = `${typeLabel}::${wsName}`;
+        let entry = typeSheets[key];
+        if (!entry) {
+          const destWs = wb.addWorksheet(`${typeLabel} - ${wsName}`);
+          if (rules) destWs.getColumn(1).width = 20; // CLIENT column
+          srcWs.columns.forEach((col, i) => {
+            if (col.width) destWs.getColumn(i + 1 + colShift).width = col.width;
+          });
+          destWs.views = srcWs.views || [];
+          entry = typeSheets[key] = { ws: destWs, nextRow: 1 };
+        }
+        const destWs = entry.ws;
+        const rowOffset = entry.nextRow - 1;
+        let lastRowUsed = entry.nextRow - 1;
         srcWs.eachRow({ includeEmpty: false }, (row, rowNum) => {
-          const destRow = destWs.getRow(rowNum);
+          const destRowNum = rowOffset + rowNum;
+          lastRowUsed = Math.max(lastRowUsed, destRowNum);
+          if (rules && rowNum === rules.bannerRow) return; // was the "Client: Name" banner — leave blank
+          const destRow = destWs.getRow(destRowNum);
           destRow.height = row.height;
           row.eachCell({ includeEmpty: true }, (cell, colNum) => {
-            const destCell = destWs.getCell(rowNum, colNum);
-            destCell.value      = cell.value;
+            // Merged non-master cells proxy the master's value in exceljs — copying that
+            // blindly duplicates the title/banner text into every column it used to span.
+            // Only the master cell gets the value; the merge itself is re-created below.
+            const isMergedNonMaster = cell.isMerged && cell.master !== cell;
+            const destCell = destWs.getCell(destRowNum, colNum + colShift);
+            if (cell.value && typeof cell.value === 'object' && cell.value.formula) {
+              destCell.value = {
+                formula: shiftFormula(cell.value.formula, colShift, rowOffset),
+                result: cell.value.result,
+              };
+            } else {
+              destCell.value = isMergedNonMaster ? null : cell.value;
+            }
             destCell.font       = cell.font ? { ...cell.font } : undefined;
             destCell.fill       = cell.fill ? { ...cell.fill } : undefined;
             destCell.alignment  = cell.alignment ? { ...cell.alignment } : undefined;
             destCell.numFmt     = cell.numFmt;
             destCell.border     = cell.border ? { ...cell.border } : undefined;
           });
+          srcMerges
+            .filter(m => m.r1 === rowNum && m.r2 === rowNum)
+            .forEach(m => destWs.mergeCells(destRowNum, m.c1 + colShift, destRowNum, m.c2 + colShift));
+          if (rules && rowNum === rules.headerRow) {
+            const c = destWs.getCell(destRowNum, 1);
+            c.value = 'CLIENT';
+            c.font  = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+            c.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E4A7A' } };
+            c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            c.border = allBorder('FF1E3A5F');
+          } else if (rules && rowNum >= rules.dataFrom) {
+            const c = destWs.getCell(destRowNum, 1);
+            c.value = u.name;
+            c.font  = normFont(9);
+            c.fill  = row.getCell(1).fill ? { ...row.getCell(1).fill } : undefined;
+            c.alignment = { vertical: 'middle', horizontal: 'left' };
+            c.border = allBorder();
+          }
         });
-        srcWs.columns.forEach((col, i) => {
-          if (col.width) destWs.getColumn(i + 1).width = col.width;
-        });
-        destWs.views = srcWs.views || [];
+        entry.nextRow = lastRowUsed + 2; // one blank row between customers' blocks
       }
     }
 
@@ -864,12 +992,17 @@ router.get('/export-all', adminAuth, async (req, res) => {
 
 router.get('/summary', adminAuth, async (req, res) => {
   try {
-    const [users] = await db.query("SELECT user_id, name, email, country FROM users WHERE role = 'user' ORDER BY name");
+    const [users] = await db.query("SELECT user_id, name, email, country, type FROM users WHERE role = 'user' ORDER BY name");
     const summaries = await Promise.all(users.map(async (u) => {
       const ledger      = await buildLedger(u.user_id);
       const total_credit = Math.round(ledger.reduce((s, r) => s + r.credit, 0));
       const total_debit  = Math.round(ledger.reduce((s, r) => s + r.debit,  0));
-      return { ...u, total_credit, total_debit, total_billed: total_debit, total_paid: total_credit, balance: total_credit - total_debit };
+      // Dealer purchase cost: the flat-fee formula (Bid Price + Others + Dealer Fee) total,
+      // car purchases only (excludes parts purchases and remittances). Only meaningful for dealers.
+      const dealer_purchase_cost = u.type === 'dealer'
+        ? Math.round(ledger.filter(e => e.entry_type === 'purchase').reduce((s, r) => s + r.debit, 0))
+        : null;
+      return { ...u, total_credit, total_debit, total_billed: total_debit, total_paid: total_credit, balance: total_credit - total_debit, dealer_purchase_cost };
     }));
     res.json(summaries);
   } catch (err) {

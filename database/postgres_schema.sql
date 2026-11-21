@@ -35,7 +35,7 @@ CREATE TABLE users (
   country         VARCHAR(80),
   city            VARCHAR(80),
   role            VARCHAR(10)  NOT NULL DEFAULT 'user'  CHECK (role IN ('user','admin')),
-  type            VARCHAR(20)  NOT NULL DEFAULT 'ordinary' CHECK (type IN ('ordinary','dealer')),
+  type            VARCHAR(20)  NOT NULL DEFAULT 'ordinary' CHECK (type IN ('ordinary','dealer','agent')),
   status          VARCHAR(10)  NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
   created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -214,6 +214,9 @@ CREATE TABLE documents (
   purchase_id   INTEGER NOT NULL REFERENCES purchases(purchase_id) ON DELETE CASCADE,
   user_id       INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
   car_id        INTEGER REFERENCES cars(car_id) ON DELETE SET NULL,
+  -- References shipping(shipping_id); added via ALTER TABLE below since `shipping` is
+  -- defined later in this file. NULL = a general purchase document, not shipment-specific.
+  shipping_id   INTEGER,
   name          VARCHAR(255),
   type          VARCHAR(50) NOT NULL DEFAULT 'user_and_admin',
   url           VARCHAR(500) NOT NULL,
@@ -221,6 +224,7 @@ CREATE TABLE documents (
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_documents_purchase_id ON documents(purchase_id);
+CREATE INDEX idx_documents_shipping_id ON documents(shipping_id);
 
 CREATE TABLE shipping (
   shipping_id           SERIAL PRIMARY KEY,
@@ -228,6 +232,7 @@ CREATE TABLE shipping (
   user_id               INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   shipping_company      VARCHAR(200),
   ship_name             VARCHAR(200),
+  voyage                VARCHAR(200),
   route                 VARCHAR(400),
   etd                   DATE,
   eta                   DATE,
@@ -236,6 +241,9 @@ CREATE TABLE shipping (
 );
 CREATE INDEX idx_shipping_purchase_id ON shipping(purchase_id);
 CREATE INDEX idx_shipping_user_id    ON shipping(user_id);
+
+ALTER TABLE documents ADD CONSTRAINT fk_documents_shipping
+  FOREIGN KEY (shipping_id) REFERENCES shipping(shipping_id) ON DELETE CASCADE;
 
 CREATE TABLE bl (
   bl_id              SERIAL PRIMARY KEY,

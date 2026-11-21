@@ -145,12 +145,10 @@ router.get('/', adminAuth, async (req, res) => {
               p.auction_date AS auction_date,
               u.name AS user_name, u.email AS user_email, u.country AS user_country,
               ci.url AS car_image,
-              CASE WHEN u.type = 'dealer'
-                THEN COALESCE(pd.bid_price,0) + COALESCE(pd.others,0) + COALESCE(pd.dealer_fee,0)
-                ELSE COALESCE(pd.bid_price,0) + COALESCE(pd.auction_charges,0) + COALESCE(pd.transportation,0) +
-                     COALESCE(pd.loading_custom,0) + COALESCE(pd.others_commission,0) +
-                     COALESCE(pd.radiation_photos,0) + COALESCE(pd.custom_fee,0) + COALESCE(pd.freight,0)
-              END AS purchase_total,
+              COALESCE(pd.third_party_fee,0) + COALESCE(pd.bid_price,0) + COALESCE(pd.auction_charges,0) +
+              COALESCE(pd.transportation,0) + COALESCE(pd.loading_custom,0) + COALESCE(pd.tax_10_percent,0) +
+              COALESCE(pd.radiation_photos,0) + COALESCE(pd.custom_fee,0) + COALESCE(pd.freight,0) +
+              COALESCE(pd.recycle,0) + COALESCE(pd.others,0) AS purchase_total,
               (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id) AS doc_count
        FROM purchases p
        JOIN cars c      ON c.car_id = p.car_id

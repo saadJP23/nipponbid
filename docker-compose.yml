@@ -29,6 +29,7 @@ services:
       DB_USER: autobid_user
       DB_PASSWORD: autobid_pass
       DB_NAME: autobid
+      DB_SSL: 'false'
       JWT_SECRET: change_this_to_a_secure_secret_in_production
       CLIENT_URL: http://localhost:5173
       REDIS_URL: redis://redis:6379

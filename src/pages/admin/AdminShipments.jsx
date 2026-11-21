@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllShipments, createShipment, updateShipment, uploadShipmentDoc, resolveImageUrl } from '../../services/api'
-import { Ship, Plus, ChevronLeft, ChevronRight, Upload } from 'lucide-react'
+import { getAllShipments, getShipment, updateShipment, uploadShipmentDoc, deleteShipmentDoc, resolveImageUrl } from '../../services/api'
+import { Ship, ChevronLeft, ChevronRight, Upload, FileText, Trash2 } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 import { toDateInputValue } from '../../utils/dates'
@@ -10,12 +10,6 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-dig
 
 const BL_BADGE = { pending: 'badge-amber', issued: 'badge-green', requested: 'badge-blue' }
 
-const BLANK = {
-  purchase_id: '', shipping_company: '', ship_name: '', route: '',
-  etd: '', eta: '', port_of_loading: '', port_of_discharge: '',
-  result_of_inspection: '', bl_status: 'pending',
-}
-
 export default function AdminShipments() {
   const [shipments, setShipments] = useState([])
   const [total, setTotal] = useState(0)
@@ -24,8 +18,7 @@ export default function AdminShipments() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
   const [editForm, setEditForm] = useState(null)
-  const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState(BLANK)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [docFile, setDocFile] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -40,11 +33,12 @@ export default function AdminShipments() {
 
   useEffect(() => { load(page) }, [page, load])
 
-  const openShipment = (s) => {
+  const applyDetail = (s) => {
     setSelected(s)
     setEditForm({
       shipping_company: s.shipping_company || '',
       ship_name: s.ship_name || '',
+      voyage: s.voyage || '',
       route: s.route || '',
       etd: toDateInputValue(s.etd),
       eta: toDateInputValue(s.eta),
@@ -55,28 +49,31 @@ export default function AdminShipments() {
     })
   }
 
+  // Every purchase is implicitly a shipment, so opening one always works — even
+  // before any shipping info has been saved for it yet.
+  const openShipment = (s) => {
+    applyDetail(s) // show list-row data immediately, then refresh with full detail (incl. documents)
+    setDetailLoading(true)
+    getShipment(s.purchase_id)
+      .then(r => applyDetail(r.data))
+      .catch(() => toast.error('Failed to load shipment detail'))
+      .finally(() => setDetailLoading(false))
+  }
+
+  const reloadDetail = () => {
+    if (!selected) return
+    getShipment(selected.purchase_id).then(r => applyDetail(r.data)).catch(() => {})
+  }
+
   const handleUpdate = async (e) => {
     e.preventDefault()
     setSubmitting(true)
     try {
-      await updateShipment(selected.shipping_id, editForm)
-      toast.success('Updated')
-      setSelected(null)
+      await updateShipment(selected.purchase_id, editForm)
+      toast.success('Saved')
+      reloadDetail()
       load(page)
-    } catch { toast.error('Failed') }
-    finally { setSubmitting(false) }
-  }
-
-  const handleCreate = async (e) => {
-    e.preventDefault()
-    setSubmitting(true)
-    try {
-      await createShipment({ ...createForm, purchase_id: Number(createForm.purchase_id) })
-      toast.success('Shipment created')
-      setShowCreate(false)
-      setCreateForm(BLANK)
-      load(page)
-    } catch { toast.error('Failed') }
+    } catch { toast.error('Failed to save') }
     finally { setSubmitting(false) }
   }
 
@@ -84,13 +81,22 @@ export default function AdminShipments() {
     if (!docFile) return toast.error('Select a file')
     setUploading(true)
     const fd = new FormData()
-    fd.append('document', docFile)
+    fd.append('file', docFile)
     try {
-      await uploadShipmentDoc(selected.shipping_id, fd)
+      await uploadShipmentDoc(selected.purchase_id, fd)
       toast.success('Document uploaded')
       setDocFile(null)
+      reloadDetail()
     } catch { toast.error('Upload failed') }
     finally { setUploading(false) }
+  }
+
+  const handleDeleteDoc = async (docId) => {
+    try {
+      await deleteShipmentDoc(selected.purchase_id, docId)
+      toast.success('Document deleted')
+      reloadDetail()
+    } catch { toast.error('Failed to delete document') }
   }
 
   return (
@@ -101,9 +107,6 @@ export default function AdminShipments() {
             <h1 className="page-title">Shipments</h1>
             <p className="page-subtitle">{fmt(total)} records</p>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            <Plus size={15} /> New Shipment
-          </button>
         </div>
 
         <div className="card">
@@ -112,7 +115,7 @@ export default function AdminShipments() {
           ) : shipments.length === 0 ? (
             <div className="py-16 text-center">
               <Ship size={32} className="mx-auto text-grey-300 mb-3" />
-              <p className="text-grey-500 text-sm">No shipments</p>
+              <p className="text-grey-500 text-sm">No purchases yet</p>
             </div>
           ) : (
             <div className="table-wrapper">
@@ -128,7 +131,7 @@ export default function AdminShipments() {
                 </tr></thead>
                 <tbody>
                   {shipments.map(s => (
-                    <tr key={s.shipping_id} onClick={() => openShipment(s)} className="cursor-pointer">
+                    <tr key={s.purchase_id} onClick={() => openShipment(s)} className="cursor-pointer">
                       <td>
                         <div className="flex items-center gap-3">
                           {s.car_image ? (
@@ -194,6 +197,11 @@ export default function AdminShipments() {
                   <input className="input" value={editForm.ship_name}
                     onChange={e => setEditForm(f => ({ ...f, ship_name: e.target.value }))} />
                 </div>
+                <div>
+                  <label className="label">Voyage</label>
+                  <input className="input" value={editForm.voyage}
+                    onChange={e => setEditForm(f => ({ ...f, voyage: e.target.value }))} />
+                </div>
                 <div className="col-span-2">
                   <label className="label">Route</label>
                   <input className="input" value={editForm.route}
@@ -210,12 +218,12 @@ export default function AdminShipments() {
                     onChange={e => setEditForm(f => ({ ...f, port_of_discharge: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="label">ETD</label>
+                  <label className="label">ETD (Departure)</label>
                   <input className="input" type="date" value={editForm.etd}
                     onChange={e => setEditForm(f => ({ ...f, etd: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="label">ETA</label>
+                  <label className="label">ETA (Arrival)</label>
                   <input className="input" type="date" value={editForm.eta}
                     onChange={e => setEditForm(f => ({ ...f, eta: e.target.value }))} />
                 </div>
@@ -225,7 +233,7 @@ export default function AdminShipments() {
                     onChange={e => setEditForm(f => ({ ...f, result_of_inspection: e.target.value }))} />
                 </div>
                 <div className="col-span-2">
-                  <label className="label">BL Status</label>
+                  <label className="label">Status</label>
                   <select className="input" value={editForm.bl_status}
                     onChange={e => setEditForm(f => ({ ...f, bl_status: e.target.value }))}>
                     <option value="pending">Pending</option>
@@ -240,7 +248,25 @@ export default function AdminShipments() {
             </form>
 
             <div className="border-t border-grey-200 pt-4 space-y-3">
-              <p className="label">Upload Document</p>
+              <p className="label">Documents</p>
+              <div className="space-y-2">
+                {detailLoading ? (
+                  <p className="text-xs text-grey-400">Loading…</p>
+                ) : (selected.documents || []).length === 0 ? (
+                  <p className="text-xs text-grey-400">No documents yet</p>
+                ) : selected.documents.map(doc => (
+                  <div key={doc.document_id} className="flex items-center gap-3 card p-3">
+                    <FileText size={15} className="text-grey-400 flex-shrink-0" />
+                    <a href={resolveImageUrl(doc.url)} target="_blank" rel="noreferrer"
+                      className="flex-1 text-sm text-navy font-medium hover:text-red truncate">
+                      {doc.name}
+                    </a>
+                    <button className="btn-icon text-grey-400 hover:text-red" onClick={() => handleDeleteDoc(doc.document_id)}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
               <input type="file" className="input text-sm" onChange={e => setDocFile(e.target.files?.[0] || null)} />
               <button className="btn btn-secondary btn-sm" onClick={handleUploadDoc} disabled={uploading}>
                 <Upload size={13} /> {uploading ? 'Uploading…' : 'Upload'}
@@ -248,49 +274,6 @@ export default function AdminShipments() {
             </div>
           </div>
         )}
-      </Drawer>
-
-      <Drawer open={showCreate} onClose={() => setShowCreate(false)} title="New Shipment" width={440}>
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="label">Purchase ID *</label>
-            <input className="input" type="number" value={createForm.purchase_id}
-              onChange={e => setCreateForm(f => ({ ...f, purchase_id: e.target.value }))} required placeholder="Enter purchase_id" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Shipping Company</label>
-              <input className="input" value={createForm.shipping_company}
-                onChange={e => setCreateForm(f => ({ ...f, shipping_company: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Ship Name</label>
-              <input className="input" value={createForm.ship_name}
-                onChange={e => setCreateForm(f => ({ ...f, ship_name: e.target.value }))} />
-            </div>
-            <div className="col-span-2">
-              <label className="label">Route</label>
-              <input className="input" value={createForm.route}
-                onChange={e => setCreateForm(f => ({ ...f, route: e.target.value }))} placeholder="Japan → UK" />
-            </div>
-            <div>
-              <label className="label">ETD</label>
-              <input className="input" type="date" value={createForm.etd}
-                onChange={e => setCreateForm(f => ({ ...f, etd: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">ETA</label>
-              <input className="input" type="date" value={createForm.eta}
-                onChange={e => setCreateForm(f => ({ ...f, eta: e.target.value }))} />
-            </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" className="btn btn-secondary flex-1" onClick={() => setShowCreate(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary flex-1" disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create Shipment'}
-            </button>
-          </div>
-        </form>
       </Drawer>
     </>
   )

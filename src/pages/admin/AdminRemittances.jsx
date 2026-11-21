@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllRemittances, confirmRemittance, deleteRemittance, adminCreateRemittance, getAdminUsers } from '../../services/api'
-import { Banknote, Plus, ChevronLeft, ChevronRight, Check, Trash2 } from 'lucide-react'
+import { getAllRemittances, updateRemittance, confirmRemittance, deleteRemittance, adminCreateRemittance, getAdminUsers, resolveImageUrl } from '../../services/api'
+import { Banknote, Plus, ChevronLeft, ChevronRight, Check, Save, Trash2 } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
+import { toDateInputValue } from '../../utils/dates'
 
 const fmt = (n) => Number(n || 0).toLocaleString()
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -17,6 +18,8 @@ export default function AdminRemittances() {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
+  const [editForm, setEditForm] = useState(null)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [confirmAmt, setConfirmAmt] = useState('')
   const [confirmNote, setConfirmNote] = useState('')
   const [updating, setUpdating] = useState(false)
@@ -43,8 +46,30 @@ export default function AdminRemittances() {
 
   const openRemittance = (r) => {
     setSelected(r)
+    setEditForm({
+      sender_name: r.sender_name || '',
+      deposit_amount: r.deposit_amount || '',
+      tt_date: toDateInputValue(r.tt_date),
+      remarks: r.remarks || '',
+      status: r.status || 'pending',
+    })
     setConfirmAmt(r.deposit_amount)
     setConfirmNote('')
+  }
+
+  const handleUpdate = async (e) => {
+    e.preventDefault()
+    setSavingEdit(true)
+    try {
+      const { data: updated } = await updateRemittance(selected.remittance_id, {
+        ...editForm, deposit_amount: Number(editForm.deposit_amount),
+      })
+      setSelected(updated)
+      setConfirmAmt(updated.deposit_amount)
+      setRemittances(list => list.map(r => r.remittance_id === updated.remittance_id ? { ...r, ...updated } : r))
+      toast.success('Remittance updated')
+    } catch { toast.error('Failed to update') }
+    finally { setSavingEdit(false) }
   }
 
   const handleConfirm = async () => {
@@ -167,28 +192,60 @@ export default function AdminRemittances() {
       </div>
 
       <Drawer open={!!selected} onClose={() => setSelected(null)} title={selected?.ref_no || 'Remittance'} subtitle={selected?.user_name} width={420}>
-        {selected && (
+        {selected && editForm && (
           <div className="space-y-5">
             <div className="card p-4">
               {[
                 ['Ref No.', selected.ref_no],
                 ['User', selected.user_name],
-                ['Sender', selected.sender_name],
-                ['Amount', `¥ ${fmt(selected.deposit_amount)}`],
-                ['TT Date', fmtDate(selected.tt_date)],
-                ['Status', selected.status],
-                ['Remarks', selected.remarks || '—'],
+                ['Receipt', selected.receipt_url],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2 border-b border-grey-100 last:border-0">
                   <span className="text-sm text-grey-600">{k}</span>
                   <span className="text-sm font-medium text-navy">
-                    {k === 'Status'
-                      ? <span className={`badge ${v === 'confirmed' ? 'badge-green' : 'badge-amber'}`}>{v}</span>
+                    {k === 'Receipt'
+                      ? (v
+                          ? <a href={resolveImageUrl(v)} target="_blank" rel="noreferrer" className="text-red hover:underline">View Receipt</a>
+                          : <span className="text-grey-400">Not uploaded</span>)
                       : v}
                   </span>
                 </div>
               ))}
             </div>
+
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="label">Sender Name</label>
+                <input className="input" value={editForm.sender_name}
+                  onChange={e => setEditForm(f => ({ ...f, sender_name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Amount (¥)</label>
+                <input className="input" type="number" value={editForm.deposit_amount}
+                  onChange={e => setEditForm(f => ({ ...f, deposit_amount: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">TT Date</label>
+                <input className="input" type="date" value={editForm.tt_date}
+                  onChange={e => setEditForm(f => ({ ...f, tt_date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Remarks</label>
+                <textarea className="input" rows={2} value={editForm.remarks}
+                  onChange={e => setEditForm(f => ({ ...f, remarks: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Status</label>
+                <select className="input" value={editForm.status}
+                  onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                </select>
+              </div>
+              <button type="submit" className="btn btn-primary w-full" disabled={savingEdit}>
+                <Save size={14} /> {savingEdit ? 'Saving…' : 'Save Changes'}
+              </button>
+            </form>
 
             {selected.status === 'pending' && (
               <div className="space-y-3">

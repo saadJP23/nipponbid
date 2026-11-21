@@ -272,25 +272,26 @@ export default function AdminPurchases() {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
-  // Auto-calculate nipponbid_commission on the fly
+  // Auto-calculate nipponbid_commission on the fly.
+  // Ordinary customers with no third party involved are entered manually instead.
   const selectedUserType = selected ? (users.find(u => u.user_id === selected.user_id)?.type || 'ordinary') : 'ordinary'
+  // Ordinary customers always enter their commission manually (no dealer-fee concept applies to them);
+  // other customer types keep the existing auto-calculated rules.
+  const isManualCommission = selectedUserType === 'ordinary' || (!form.is_third_party && selectedUserType !== 'dealer')
   useEffect(() => {
-    if (!selected) return
-    let calc = 0
+    if (!selected || isManualCommission) return
+    let calc
     if (form.is_third_party) {
-      // Third party involved (dealer or ordinary): commission - third_party_fee
-      calc = n(form.others_commission) - n(form.third_party_fee)
-    } else if (selectedUserType === 'dealer') {
-      // Dealer, no third party: dealer_fee - costs
-      calc = n(form.dealer_fee) - (n(form.auction_charges) + n(form.transportation) + n(form.loading_custom) + n(form.others_commission))
+      // Third party involved: dealer fee minus the third party fee and the costs it was meant to cover
+      calc = n(form.dealer_fee) - (n(form.third_party_fee) + n(form.auction_charges) + n(form.transportation) + n(form.loading_custom))
     } else {
-      // Ordinary, no third party: direct commission
-      calc = n(form.others_commission)
+      // Dealer, no third party: dealer fee minus the costs it was meant to cover
+      calc = n(form.dealer_fee) - (n(form.auction_charges) + n(form.transportation) + n(form.loading_custom))
     }
     setForm(f => ({ ...f, nipponbid_commission: calc }))
-  }, [form.dealer_fee, form.auction_charges, form.transportation, form.loading_custom, form.others_commission, form.is_third_party, form.third_party_fee, selectedUserType, selected])
+  }, [form.dealer_fee, form.auction_charges, form.transportation, form.loading_custom, form.is_third_party, form.third_party_fee, selectedUserType, selected, isManualCommission])
 
-  const TOTAL_KEYS = ['bid_price','auction_charges','transportation','loading_custom','others_commission','radiation_photos','custom_fee','freight']
+  const TOTAL_KEYS = ['third_party_fee','bid_price','auction_charges','transportation','loading_custom','tax_10_percent','radiation_photos','custom_fee','freight','recycle','others']
   const total_cost = TOTAL_KEYS.reduce((sum, k) => sum + n(form[k]), 0)
 
   const handleSave = async () => {
@@ -571,14 +572,29 @@ export default function AdminPurchases() {
                   </div>
                 )}
 
-                {COST_FIELDS.map(({ key, label }) => (
+                {COST_FIELDS
+                  // Ordinary customers: Others Commission and Dealer Fee don't apply, hide them here only.
+                  .filter(({ key }) => selectedUserType !== 'ordinary' || (key !== 'others_commission' && key !== 'dealer_fee'))
+                  .map(({ key, label }) => (
                   <div key={key} className="flex items-center gap-3">
                     <span className="text-sm text-grey-600 w-44 flex-shrink-0">{label}</span>
                     {key === 'nipponbid_commission' ? (
-                      <div className="flex-1 flex items-center justify-between px-3 py-2 rounded bg-green-50 border border-green-200">
-                        <span className="text-xs text-green-600 italic">auto-calculated</span>
-                        <span className="font-mono font-semibold text-green-700">¥ {fmt(form[key] ?? 0)}</span>
-                      </div>
+                      isManualCommission ? (
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
+                          <input
+                            type="number"
+                            className="input pl-7 font-mono text-right"
+                            value={form[key] ?? 0}
+                            onChange={set(key)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-between px-3 py-2 rounded bg-green-50 border border-green-200">
+                          <span className="text-xs text-green-600 italic">auto-calculated</span>
+                          <span className="font-mono font-semibold text-green-700">¥ {fmt(form[key] ?? 0)}</span>
+                        </div>
+                      )
                     ) : (
                       <div className="relative flex-1">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
@@ -678,9 +694,11 @@ export default function AdminPurchases() {
               <select className="input flex-1" value={createForm.auction_id}
                 onChange={e => handleAuctionChange(e.target.value)}>
                 <option value="">No auction / select…</option>
-                {auctions.map(a => (
+                {Array.from(new Map(auctions.map(a => [a.auction_name, a])).values())
+                  .sort((a, b) => a.auction_name.localeCompare(b.auction_name))
+                  .map(a => (
                   <option key={a.auction_id} value={a.auction_id}>
-                    {a.auction_name} — {a.auction_date ? a.auction_date.slice(0,10) : 'no date'}
+                    {a.auction_name}
                   </option>
                 ))}
               </select>

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAdminUsers, createAdminUser, toggleUser, getUserLedger } from '../../services/api'
-import { Users, Plus, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight } from 'lucide-react'
+import { getAdminUsers, createAdminUser, updateAdminUser, toggleUser, getUserLedger } from '../../services/api'
+import { Users, Plus, Pencil, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 
@@ -8,6 +8,17 @@ const fmt = (n) => Number(n || 0).toLocaleString()
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
 const BLANK = { name: '', email: '', password: '', contact_number: '', country: '', city: '', role: 'user', type: 'ordinary' }
+
+const toEditForm = (u) => ({
+  name: u.name || '',
+  email: u.email || '',
+  password: '',
+  contact_number: u.contact_number || '',
+  country: u.country || '',
+  city: u.city || '',
+  role: u.role || 'user',
+  type: u.type || 'ordinary',
+})
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([])
@@ -20,6 +31,9 @@ export default function AdminUsers() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState(BLANK)
   const [submitting, setSubmitting] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState(BLANK)
+  const [saving, setSaving] = useState(false)
 
   const load = useCallback((p) => {
     setLoading(true)
@@ -33,10 +47,31 @@ export default function AdminUsers() {
 
   const openUser = (u) => {
     setSelected(u)
+    setEditing(false)
     setLedger(null)
     getUserLedger(u.user_id)
       .then(r => setLedger(r.data?.ledger || []))
       .catch(() => setLedger([]))
+  }
+
+  const startEdit = () => {
+    setEditForm(toEditForm(selected))
+    setEditing(true)
+  }
+
+  const handleUpdate = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const payload = { ...editForm }
+      if (!payload.password) delete payload.password
+      const { data: updated } = await updateAdminUser(selected.user_id, payload)
+      setSelected(s => ({ ...s, ...updated }))
+      setUsers(list => list.map(u => u.user_id === updated.user_id ? { ...u, ...updated } : u))
+      toast.success('User updated')
+      setEditing(false)
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to update user') }
+    finally { setSaving(false) }
   }
 
   const handleToggle = async (u, e) => {
@@ -140,28 +175,85 @@ export default function AdminUsers() {
       <Drawer open={!!selected} onClose={() => setSelected(null)} title={selected?.name || ''} subtitle={selected?.email} width={480}>
         {selected && (
           <div className="space-y-5">
-            <div className="card p-4">
-              {[
-                ['Role', selected.role],
-                ['Type', selected.type],
-                ['Status', selected.status],
-                ['Phone', selected.contact_number || '—'],
-                ['Country', selected.country || '—'],
-                ['City', selected.city || '—'],
-                ['Joined', fmtDate(selected.created_at)],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between py-2 border-b border-grey-100 last:border-0">
-                  <span className="text-sm text-grey-600">{k}</span>
-                  <span className="text-sm font-medium capitalize">
-                    {k === 'Status'
-                      ? <span className={`badge ${v === 'active' ? 'badge-green' : 'badge-red'}`}>{v}</span>
-                      : v}
-                  </span>
+            {editing ? (
+              <form onSubmit={handleUpdate} className="space-y-4">
+                <div>
+                  <label className="label">Full Name *</label>
+                  <input className="input" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} required />
                 </div>
-              ))}
-            </div>
+                <div>
+                  <label className="label">Email *</label>
+                  <input className="input" type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="label">New Password</label>
+                  <input className="input" type="password" placeholder="Leave blank to keep current password" value={editForm.password} onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))} minLength={6} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Role</label>
+                    <select className="input" value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}>
+                      <option value="user">User</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Type</label>
+                    <select className="input" value={editForm.type} onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}>
+                      <option value="ordinary">Ordinary</option>
+                      <option value="dealer">Dealer</option>
+                      <option value="agent">Agent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Country</label>
+                    <input className="input" value={editForm.country} onChange={e => setEditForm(f => ({ ...f, country: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label">City</label>
+                    <input className="input" value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Contact Number</label>
+                  <input className="input" value={editForm.contact_number} onChange={e => setEditForm(f => ({ ...f, contact_number: e.target.value }))} />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" className="btn btn-secondary flex-1" onClick={() => setEditing(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary flex-1" disabled={saving}>
+                    {saving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="card p-4">
+                <div className="flex justify-end -mt-1 -mr-1 mb-1">
+                  <button className="btn btn-secondary btn-sm" onClick={startEdit}>
+                    <Pencil size={13} /> Edit
+                  </button>
+                </div>
+                {[
+                  ['Role', selected.role],
+                  ['Type', selected.type],
+                  ['Status', selected.status],
+                  ['Phone', selected.contact_number || '—'],
+                  ['Country', selected.country || '—'],
+                  ['City', selected.city || '—'],
+                  ['Joined', fmtDate(selected.created_at)],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between py-2 border-b border-grey-100 last:border-0">
+                    <span className="text-sm text-grey-600">{k}</span>
+                    <span className="text-sm font-medium capitalize">
+                      {k === 'Status'
+                        ? <span className={`badge ${v === 'active' ? 'badge-green' : 'badge-red'}`}>{v}</span>
+                        : v}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {balance !== null && (
+            {!editing && balance !== null && (
               <div className="stat-card">
                 <span className="stat-label">Account Balance</span>
                 <p className={`stat-value ${balance >= 0 ? 'text-green' : 'text-red'}`}>¥ {fmt(Math.abs(balance))}</p>
@@ -169,7 +261,7 @@ export default function AdminUsers() {
               </div>
             )}
 
-            {ledger && ledger.length > 0 && (
+            {!editing && ledger && ledger.length > 0 && (
               <div>
                 <p className="label">Recent Transactions</p>
                 <div className="card divide-y divide-grey-100">

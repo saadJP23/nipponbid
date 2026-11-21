@@ -75,6 +75,34 @@ router.get('/', adminAuth, async (req, res) => {
   }
 });
 
+// General edit — sender, amount, TT date, remarks. Status changes go through /:id/confirm instead.
+router.put('/:id', adminAuth, async (req, res) => {
+  try {
+    const { sender_name, deposit_amount, tt_date, remarks, status } = req.body;
+    const [existing] = await db.query('SELECT * FROM remittances WHERE remittance_id = ?', [req.params.id]);
+    if (!existing.length) return res.status(404).json({ message: 'Remittance not found' });
+
+    const newStatus = status === 'confirmed' ? 'confirmed' : status === 'pending' ? 'pending' : existing[0].status;
+    // Moving to confirmed sets confirmed_at (if not already); moving back to pending clears it.
+    const confirmedAt = newStatus === 'confirmed' ? (existing[0].confirmed_at || new Date()) : null;
+
+    await db.query(
+      'UPDATE remittances SET sender_name=?, deposit_amount=?, tt_date=?, remarks=?, status=?, confirmed_at=? WHERE remittance_id=?',
+      [sender_name || null, deposit_amount || existing[0].deposit_amount, tt_date || null, remarks || null,
+       newStatus, confirmedAt, req.params.id]
+    );
+
+    const [updated] = await db.query(
+      `SELECT r.*, u.name AS user_name, u.email AS user_email
+       FROM remittances r JOIN users u ON u.user_id = r.user_id WHERE r.remittance_id = ?`,
+      [req.params.id]
+    );
+    res.json(updated[0]);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.put('/:id/confirm', adminAuth, async (req, res) => {
   try {
     const { deposit_amount, remarks } = req.body;

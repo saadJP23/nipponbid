@@ -35,23 +35,27 @@ router.get('/my', auth, async (req, res) => {
   }
 });
 
-// ── Admin: all shipments ──────────────────────────────────────────────────────
+// ── Admin: all shipments ────────────────────────────────────────────────────────
+// Every purchase is implicitly a shipment now — LEFT JOINed so a purchase shows up
+// here even before anyone has saved shipping info for it.
 router.get('/', adminAuth, async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
-    const [[{ total }]] = await db.query('SELECT COUNT(*) as total FROM shipping');
+    const [[{ total }]] = await db.query('SELECT COUNT(*) as total FROM purchases');
     const [rows] = await db.query(
-      `SELECT s.*, p.file_code_no, p.lot_no, p.destination,
+      `SELECT p.purchase_id, p.file_code_no, p.lot_no, p.destination,
               c.make, c.model, c.year, c.chassis_no,
               u.name AS user_name, u.country AS user_country,
+              s.shipping_id, s.shipping_company, s.ship_name, s.voyage, s.route,
+              s.etd, s.eta, s.result_of_inspection,
               bl.port_of_loading, bl.port_of_discharge, bl.status AS bl_status
-       FROM shipping s
-       JOIN purchases p ON p.purchase_id = s.purchase_id
+       FROM purchases p
        JOIN cars c ON c.car_id = p.car_id
-       JOIN users u ON u.user_id = s.user_id
+       JOIN users u ON u.user_id = p.user_id
+       LEFT JOIN shipping s ON s.purchase_id = p.purchase_id
        LEFT JOIN bl ON bl.shipping_id = s.shipping_id
-       ORDER BY s.created_at DESC
+       ORDER BY p.created_at DESC
        LIMIT ? OFFSET ?`,
       [parseInt(limit), offset]
     );
@@ -61,45 +65,48 @@ router.get('/', adminAuth, async (req, res) => {
   }
 });
 
-// ── Admin: create shipment ────────────────────────────────────────────────────
-router.post('/', adminAuth, async (req, res) => {
-  try {
-    const { purchase_id, user_id, shipping_company, ship_name, route, etd, eta, result_of_inspection } = req.body;
-    if (!purchase_id || !user_id) return res.status(400).json({ message: 'purchase_id and user_id required' });
-    const [result] = await db.query(
-      'INSERT INTO shipping (purchase_id, user_id, shipping_company, ship_name, route, etd, eta, result_of_inspection) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [purchase_id, user_id, shipping_company || null, ship_name || null, route || null,
-       normalizeDate(etd), normalizeDate(eta), result_of_inspection || null]
-    );
-    const [row] = await db.query('SELECT * FROM shipping WHERE shipping_id = ?', [result.insertId]);
-    res.status(201).json(row[0]);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// ── Admin: update shipment ────────────────────────────────────────────────────
+// ── Admin: save shipping info for a purchase (creates its shipping/BL rows the
+// first time, updates them after) ───────────────────────────────────────────────
 router.put('/:id', adminAuth, async (req, res) => {
   try {
-    const { shipping_company, ship_name, route, etd, eta, result_of_inspection } = req.body;
-    await db.query(
-      'UPDATE shipping SET shipping_company=?, ship_name=?, route=?, etd=?, eta=?, result_of_inspection=? WHERE shipping_id=?',
-      [shipping_company || null, ship_name || null, route || null,
-       normalizeDate(etd), normalizeDate(eta), result_of_inspection || null, req.params.id]
-    );
-    const [row] = await db.query('SELECT * FROM shipping WHERE shipping_id = ?', [req.params.id]);
-    if (!row.length) return res.status(404).json({ message: 'Shipment not found' });
-    res.json(row[0]);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+    const purchaseId = req.params.id;
+    const { shipping_company, ship_name, voyage, route, etd, eta, result_of_inspection,
+            port_of_loading, port_of_discharge, bl_status } = req.body;
 
-// ── Admin: delete shipment ────────────────────────────────────────────────────
-router.delete('/:id', adminAuth, async (req, res) => {
-  try {
-    await db.query('DELETE FROM shipping WHERE shipping_id = ?', [req.params.id]);
-    res.json({ message: 'Shipment deleted' });
+    const [[purchase]] = await db.query('SELECT user_id FROM purchases WHERE purchase_id = ?', [purchaseId]);
+    if (!purchase) return res.status(404).json({ message: 'Purchase not found' });
+
+    const [[existingShipping]] = await db.query('SELECT shipping_id FROM shipping WHERE purchase_id = ?', [purchaseId]);
+    let shippingId = existingShipping?.shipping_id;
+    if (shippingId) {
+      await db.query(
+        'UPDATE shipping SET shipping_company=?, ship_name=?, voyage=?, route=?, etd=?, eta=?, result_of_inspection=? WHERE shipping_id=?',
+        [shipping_company || null, ship_name || null, voyage || null, route || null,
+         normalizeDate(etd), normalizeDate(eta), result_of_inspection || null, shippingId]
+      );
+    } else {
+      const [result] = await db.query(
+        'INSERT INTO shipping (purchase_id, user_id, shipping_company, ship_name, voyage, route, etd, eta, result_of_inspection) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [purchaseId, purchase.user_id, shipping_company || null, ship_name || null, voyage || null, route || null,
+         normalizeDate(etd), normalizeDate(eta), result_of_inspection || null]
+      );
+      shippingId = result.insertId;
+    }
+
+    const [[existingBl]] = await db.query('SELECT bl_id FROM bl WHERE shipping_id = ?', [shippingId]);
+    if (existingBl) {
+      await db.query(
+        'UPDATE bl SET port_of_loading=?, port_of_discharge=?, status=? WHERE bl_id=?',
+        [port_of_loading || null, port_of_discharge || null, bl_status || 'pending', existingBl.bl_id]
+      );
+    } else {
+      await db.query(
+        'INSERT INTO bl (purchase_id, user_id, shipping_id, port_of_loading, port_of_discharge, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [purchaseId, purchase.user_id, shippingId, port_of_loading || null, port_of_discharge || null, bl_status || 'pending']
+      );
+    }
+
+    res.json({ message: 'Saved' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -162,18 +169,57 @@ router.put('/bl-requests/:id', adminAuth, async (req, res) => {
   }
 });
 
+// Single shipment detail, keyed by purchase_id — includes every document uploaded
+// for that purchase (whether added here or from the Purchases page) so nothing
+// shipping-related is invisible just because of where it was uploaded.
+// Placed after the literal `/bl-requests` routes above so it doesn't shadow them.
+router.get('/:id', adminAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT p.purchase_id, p.file_code_no, p.lot_no, p.destination,
+              c.make, c.model, c.year, c.chassis_no,
+              u.name AS user_name, u.country AS user_country,
+              s.shipping_id, s.shipping_company, s.ship_name, s.voyage, s.route,
+              s.etd, s.eta, s.result_of_inspection,
+              bl.port_of_loading, bl.port_of_discharge, bl.status AS bl_status
+       FROM purchases p
+       JOIN cars c ON c.car_id = p.car_id
+       JOIN users u ON u.user_id = p.user_id
+       LEFT JOIN shipping s ON s.purchase_id = p.purchase_id
+       LEFT JOIN bl ON bl.shipping_id = s.shipping_id
+       WHERE p.purchase_id = ?`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'Purchase not found' });
+    const [documents] = await db.query(
+      'SELECT * FROM documents WHERE purchase_id = ? ORDER BY created_at DESC', [req.params.id]
+    );
+    res.json({ ...rows[0], documents });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.post('/:id/document', adminAuth, uploadDocument.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file provided' });
-    const [ship] = await db.query('SELECT purchase_id, user_id FROM shipping WHERE shipping_id=?', [req.params.id]);
-    if (!ship.length) return res.status(404).json({ message: 'Shipment not found' });
+    const [[purchase]] = await db.query('SELECT user_id FROM purchases WHERE purchase_id=?', [req.params.id]);
+    if (!purchase) return res.status(404).json({ message: 'Purchase not found' });
+    const [[ship]] = await db.query('SELECT shipping_id FROM shipping WHERE purchase_id=?', [req.params.id]);
     const fileUrl = await resolveUploadedFile(req.file, 'nipponbid/documents');
     const [result] = await db.query(
-      'INSERT INTO documents (purchase_id, user_id, name, type, url, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [ship[0].purchase_id, ship[0].user_id, req.file.originalname, 'user_and_admin', fileUrl, req.user.id]
+      'INSERT INTO documents (purchase_id, user_id, shipping_id, name, type, url, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.params.id, purchase.user_id, ship?.shipping_id || null, req.file.originalname, 'user_and_admin', fileUrl, req.user.id]
     );
     const [doc] = await db.query('SELECT * FROM documents WHERE document_id = ?', [result.insertId]);
     res.status(201).json(doc[0]);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+router.delete('/:id/document/:docId', adminAuth, async (req, res) => {
+  try {
+    await db.query('DELETE FROM documents WHERE document_id = ? AND purchase_id = ?', [req.params.docId, req.params.id]);
+    res.json({ message: 'Document deleted' });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

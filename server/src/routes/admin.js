@@ -302,15 +302,31 @@ router.post('/users', adminAuth, async (req, res) => {
 
 router.put('/users/:id', adminAuth, async (req, res) => {
   try {
-    const { name, email, contact_number, country, city, type } = req.body;
-    await db.query(
-      'UPDATE users SET name=?, email=?, contact_number=?, country=?, city=?, type=? WHERE user_id=?',
-      [name || null, email || null, contact_number || null, country || null, city || null, type || null, req.params.id]
-    );
+    const { name, email, contact_number, country, city, type, role, password } = req.body;
+    if (!name || !email) return res.status(400).json({ message: 'Name and email are required' });
+
+    const [[exists]] = await db.query('SELECT user_id FROM users WHERE email = ? AND user_id != ?', [email, req.params.id]);
+    if (exists) return res.status(409).json({ message: 'A user with this email already exists' });
+
+    if (password) {
+      const hash = await bcrypt.hash(password, 10);
+      await db.query(
+        'UPDATE users SET name=?, email=?, contact_number=?, country=?, city=?, type=?, role=?, password=? WHERE user_id=?',
+        [name, email, contact_number || null, country || null, city || null, type || 'ordinary',
+         role === 'admin' ? 'admin' : 'user', hash, req.params.id]
+      );
+    } else {
+      await db.query(
+        'UPDATE users SET name=?, email=?, contact_number=?, country=?, city=?, type=?, role=? WHERE user_id=?',
+        [name, email, contact_number || null, country || null, city || null, type || 'ordinary',
+         role === 'admin' ? 'admin' : 'user', req.params.id]
+      );
+    }
     const [[user]] = await db.query(
       'SELECT user_id, name, email, contact_number, country, city, role, type, status, created_at FROM users WHERE user_id=?',
       [req.params.id]
     );
+    if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });
