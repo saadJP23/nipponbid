@@ -18,18 +18,20 @@ const n = (v) => Math.round(Number(v) || 0);
 // auction/transport/customs costs, so only bid price, dealer fee and others count.
 const calcDealerPurchaseTotal = (pd) => n(pd.bid_price) + n(pd.dealer_fee) + n(pd.others);
 
-// Agent purchase cost: every line item billed individually, including tax and recycle.
+// Agent purchase cost: every line item billed individually, including tax, recycle, and both
+// the intermediary's commission and NipponBid's own commission.
 const calcAgentPurchaseTotal = (pd) =>
   n(pd.third_party_fee) + n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
   n(pd.loading_custom) + n(pd.tax_10_percent) + n(pd.radiation_photos) + n(pd.custom_fee) +
-  n(pd.freight) + n(pd.recycle) + n(pd.others);
+  n(pd.freight) + n(pd.recycle) + n(pd.others) + n(pd.others_commission) + n(pd.nipponbid_commission);
 
 // Ordinary client-billed total: Tax and Recycle are NOT billed to ordinary clients as separate
-// line items, but their manually-entered NipponBid Commission is included in what they owe.
+// line items, but their manually-entered NipponBid Commission is included in what they owe,
+// alongside any intermediary (Others) commission actually billed on that car.
 const calcOrdinaryPurchaseTotal = (pd) =>
   n(pd.bid_price) + n(pd.auction_charges) + n(pd.transportation) +
   n(pd.loading_custom) + n(pd.radiation_photos) + n(pd.custom_fee) + n(pd.freight) +
-  n(pd.others) + (n(pd.nipponbid_commission) - n(pd.third_party_fee));
+  n(pd.others) + n(pd.others_commission) + (n(pd.nipponbid_commission) - n(pd.third_party_fee));
 
 // Credits — confirmed remittances. Same for every customer type.
 const fetchRemittanceCredits = async (userId) => {
