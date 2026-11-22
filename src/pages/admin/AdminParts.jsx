@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllParts, updatePart, exportAllParts, adminCreatePart, getAdminUsers, billPartsClient, billPartsShinchuo } from '../../services/api'
+import { getAllParts, updatePart, exportAllParts, adminCreatePart, getAdminUsers, billPartsClient, billPartsShinchuo, exportPartsStatement } from '../../services/api'
 import { Package, ChevronLeft, ChevronRight, Download, Save, Plus, FileText, ChevronDown } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
@@ -92,6 +92,18 @@ export default function AdminParts() {
       toast.success('Shinchuo bill generated — those orders are now marked billed')
       load(page, userFilter, billedFilter)
     } catch (err) { toast.error(err.response?.data?.message || 'Nothing to bill') }
+    finally { setBilling(false) }
+  }
+
+  const handleExportStatement = async () => {
+    if (!userFilter) return toast.error('Select a client first')
+    setBilling(true)
+    try {
+      const r = await exportPartsStatement(userFilter)
+      const clientName = users.find(u => u.user_id === Number(userFilter))?.name || 'client'
+      downloadBlob(r.data, `${clientName}-statement.xlsx`)
+      toast.success('Statement exported')
+    } catch (err) { toast.error(err.response?.data?.message || 'Export failed') }
     finally { setBilling(false) }
   }
 
@@ -210,6 +222,9 @@ export default function AdminParts() {
             </div>
             <button className="btn btn-secondary" onClick={handleExport} disabled={parts.length === 0}>
               <Download size={15} /> Export Excel
+            </button>
+            <button className="btn btn-secondary" onClick={handleExportStatement} disabled={billing || !userFilter} title={!userFilter ? 'Select a client first' : ''}>
+              <FileText size={15} /> Export Statement
             </button>
             <button className="btn btn-secondary" onClick={handleBillClient} disabled={billing || !userFilter} title={!userFilter ? 'Select a client first' : ''}>
               <FileText size={15} /> Generate Client Bill

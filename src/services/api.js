@@ -88,6 +88,7 @@ export const updatePart = (id, data) => api.put(`/parts/${id}`, data);
 export const exportAllParts = () => api.get('/parts/export', { responseType: 'blob' });
 export const billPartsClient = (userId) => api.post(`/parts/bill-client/${userId}`, {}, { responseType: 'blob' });
 export const billPartsShinchuo = () => api.post('/parts/bill-shinchuo', {}, { responseType: 'blob' });
+export const exportPartsStatement = (userId) => api.get(`/parts/statement/${userId}`, { responseType: 'blob' });
 
 export const getNotifications = (params) => api.get('/notifications', { params });
 export const markRead = (id) => api.put(`/notifications/${id}/read`);

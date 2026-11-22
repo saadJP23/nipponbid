@@ -358,4 +358,103 @@ router.post('/bill-shinchuo', adminAuth, async (req, res) => {
   }
 });
 
+// Read-only per-client statement: "Current Bill" (everything still unbilled) plus
+// "Data" (the full purchase + payment history, interleaved chronologically with a
+// running balance) — mirrors the old per-client Excel workbook, generated on demand
+// instead of hand-maintained. Unlike /bill-client/:userId, this never marks anything
+// billed, so it can be re-run any time just to check where a client stands.
+router.get('/statement/:userId', adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const [[user]] = await db.query('SELECT name FROM users WHERE user_id = ?', [userId]);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const [purchaseRows] = await db.query(
+      'SELECT * FROM parts_purchases WHERE user_id = ? ORDER BY created_at ASC, parts_purchase_id ASC',
+      [userId]
+    );
+    const [remittanceRows] = await db.query(
+      'SELECT * FROM remittances WHERE user_id = ? ORDER BY tt_date ASC, remittance_id ASC',
+      [userId]
+    );
+
+    const workbook = new ExcelJS.Workbook();
+
+    // --- Current Bill sheet ---
+    const unbilled = purchaseRows.filter(r => !r.billed_to_client);
+    const currentBill = workbook.addWorksheet('Current Bill');
+    currentBill.columns = [{ width: 5 }, { width: 18 }, { width: 25 }, { width: 16 }, { width: 14 }];
+    currentBill.getRow(1).values = ['NO', 'CHASSIS', 'ITEM', 'AUCTION ID', 'TOTAL'];
+    headerStyle(currentBill.getRow(1));
+    let billTotal = 0;
+    unbilled.forEach((r, i) => {
+      const t = lineTotal(r);
+      billTotal += t;
+      const row = currentBill.getRow(2 + i);
+      row.values = [i + 1, r.chassis || '', r.part_name, r.auction_id || '', t];
+      row.getCell(5).numFmt = '¥#,##0';
+    });
+    if (unbilled.length) {
+      const totalRow = currentBill.getRow(2 + unbilled.length + 1);
+      totalRow.getCell(4).value = 'TOTAL';
+      totalRow.getCell(4).font = { bold: true };
+      totalRow.getCell(5).value = billTotal;
+      totalRow.getCell(5).numFmt = '¥#,##0';
+      totalRow.getCell(5).font = { bold: true };
+    }
+
+    // --- Data sheet: chronological purchases + payments with a running balance ---
+    const events = [
+      ...purchaseRows.map(r => ({ type: 'purchase', date: r.created_at, row: r })),
+      ...remittanceRows.map(r => ({ type: 'payment', date: r.tt_date, row: r })),
+    ].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+
+    const data = workbook.addWorksheet('Data');
+    data.columns = [
+      { width: 5 }, { width: 14 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 25 },
+      { width: 16 }, { width: 16 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 14 },
+      { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 },
+    ];
+    data.getRow(1).values = [
+      'NO', 'DATE', 'PARTICULAR', 'CHASSIS', 'DELIVERED TO', 'ITEM', 'AUCTION ID',
+      'DELIVERY COMPANY', 'TRACKING NUMBER', 'DELIVERY STATUS',
+      'BID PRICE', 'DELIVERY CHARGES', 'BANK CHARGES', 'COMMISSION', 'TOTAL', 'BALANCE',
+    ];
+    headerStyle(data.getRow(1));
+
+    let balance = 0;
+    events.forEach((e, i) => {
+      const rowNum = 2 + i;
+      const row = data.getRow(rowNum);
+      if (e.type === 'purchase') {
+        const r = e.row;
+        const total = lineTotal(r);
+        balance -= total;
+        row.values = [
+          i + 1, r.created_at ? new Date(r.created_at) : null, '', r.chassis || '', r.delivered_to || '', r.part_name,
+          r.auction_id || '', r.delivery_company || '', r.tracking_no || '', r.delivery_status || '',
+          n(r.bid_price), n(r.delivery_charges), n(r.bank_charges), n(r.commission), total, balance,
+        ];
+      } else {
+        const r = e.row;
+        const total = -n(r.deposit_amount);
+        balance -= total;
+        row.values = [
+          i + 1, r.tt_date ? new Date(r.tt_date) : null, r.remarks || 'Payment received', '', '', '',
+          '', '', '', '', '', '', '', '', total, balance,
+        ];
+      }
+      row.getCell(2).numFmt = 'dd-mmm-yyyy';
+      [11, 12, 13, 14, 15, 16].forEach(c => { row.getCell(c).numFmt = '¥#,##0'; });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${user.name.replace(/\s+/g, '-')}-statement-${Date.now()}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
