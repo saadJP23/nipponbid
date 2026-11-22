@@ -89,6 +89,11 @@ export default function AdminParts() {
       bank_charges:        p.bank_charges        ?? '',
       shinchuo_commission: p.shinchuo_commission ?? '',
       commission:          p.commission          ?? '',
+      part_name:           p.part_name           || '',
+      part_description:    p.part_description    || '',
+      platform_name:       p.platform_name       || '',
+      auction_id:          p.auction_id          || '',
+      quantity:            p.quantity            ?? 1,
     })
   }
 
@@ -104,6 +109,8 @@ export default function AdminParts() {
         bank_charges:        editForm.bank_charges        !== '' ? Number(editForm.bank_charges)        : null,
         shinchuo_commission: editForm.shinchuo_commission !== '' ? Number(editForm.shinchuo_commission) : null,
         commission:          editForm.commission          !== '' ? Number(editForm.commission)          : null,
+        bid_price:           editForm.bid_price           !== '' ? Number(editForm.bid_price)           : null,
+        quantity:            editForm.quantity            !== '' ? Number(editForm.quantity)            : 1,
       })
       toast.success('Updated')
       setSelected(null)
@@ -297,17 +304,11 @@ export default function AdminParts() {
       >
         {selected && editForm && (
           <div className="space-y-5">
-            {/* Read-only info */}
+            {/* Read-only user info (edit in Users page) */}
             <div>
-              <p className="label">Order Info</p>
+              <p className="label">User Info</p>
               <div className="card p-3">
                 {[
-                  ['Part Name',    selected.part_name],
-                  ['Description',  selected.part_description || '—'],
-                  ['Platform',     selected.platform_name    || '—'],
-                  ['Auction ID',   selected.auction_id       || '—'],
-                  ['Quantity',     selected.quantity],
-                  ['Bid Price',    selected.bid_price != null ? `¥ ${fmt(selected.bid_price)}` : '—'],
                   ['User',         selected.user_name],
                   ['Email',        selected.user_email],
                   ['Country',      selected.user_country],
@@ -324,6 +325,37 @@ export default function AdminParts() {
 
             {/* Editable fields */}
             <form onSubmit={handleSave} className="space-y-4">
+              <p className="label">Order Info</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="label">Part Name</label>
+                  <input className="input" value={editForm.part_name} onChange={setF('part_name')} />
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Description</label>
+                  <input className="input" value={editForm.part_description} onChange={setF('part_description')} />
+                </div>
+                <div>
+                  <label className="label">Platform</label>
+                  <input className="input" value={editForm.platform_name} onChange={setF('platform_name')} />
+                </div>
+                <div>
+                  <label className="label">Auction ID</label>
+                  <input className="input" value={editForm.auction_id} onChange={setF('auction_id')} />
+                </div>
+                <div>
+                  <label className="label">Quantity</label>
+                  <input className="input" type="number" min="1" value={editForm.quantity} onChange={setF('quantity')} />
+                </div>
+                <div>
+                  <label className="label">Bid Price</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
+                    <input className="input pl-7 font-mono" type="number" min="0" value={editForm.bid_price} onChange={setF('bid_price')} />
+                  </div>
+                </div>
+              </div>
+
               <p className="label">Update Order</p>
 
               <div className="grid grid-cols-2 gap-3">

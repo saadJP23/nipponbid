@@ -130,14 +130,16 @@ router.get('/', adminAuth, async (req, res) => {
 router.put('/:id', adminAuth, async (req, res) => {
   try {
     const { status, delivery_status, tracking_no, delivery_company, admin_note,
-            delivery_charges, bank_charges, shinchuo_commission, commission } = req.body;
+            delivery_charges, bank_charges, shinchuo_commission, commission,
+            part_name, part_description, platform_name, auction_id, quantity, bid_price } = req.body;
     const [existing] = await db.query('SELECT * FROM parts_purchases WHERE parts_purchase_id = ?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ message: 'Parts order not found' });
 
     await db.query(
       `UPDATE parts_purchases SET
         status=?, delivery_status=?, tracking_no=?, delivery_company=?, admin_note=?,
-        delivery_charges=?, bank_charges=?, shinchuo_commission=?, commission=?
+        delivery_charges=?, bank_charges=?, shinchuo_commission=?, commission=?,
+        part_name=?, part_description=?, platform_name=?, auction_id=?, quantity=?, bid_price=?
        WHERE parts_purchase_id=?`,
       [status || existing[0].status,
        delivery_status || existing[0].delivery_status,
@@ -148,6 +150,12 @@ router.put('/:id', adminAuth, async (req, res) => {
        bank_charges ?? existing[0].bank_charges,
        shinchuo_commission ?? existing[0].shinchuo_commission,
        commission ?? existing[0].commission,
+       part_name || existing[0].part_name,
+       part_description ?? existing[0].part_description,
+       platform_name ?? existing[0].platform_name,
+       auction_id ?? existing[0].auction_id,
+       quantity ?? existing[0].quantity,
+       bid_price ?? existing[0].bid_price,
        req.params.id]
     );
 
