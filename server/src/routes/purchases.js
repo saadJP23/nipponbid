@@ -262,24 +262,30 @@ router.put('/:id/shipping', adminAuth, async (req, res) => {
   }
 });
 
-router.post('/:id/documents', adminAuth, uploadDocument.single('document'), async (req, res) => {
+router.post('/:id/documents', adminAuth, uploadDocument.array('documents', 10), async (req, res) => {
   try {
     const { type, name } = req.body;
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    if (!req.files?.length) return res.status(400).json({ message: 'No file uploaded' });
     const [purchase] = await db.query('SELECT * FROM purchases WHERE purchase_id = ?', [req.params.id]);
     if (!purchase.length) return res.status(404).json({ message: 'Purchase not found' });
 
-    const fileUrl = await resolveUploadedFile(req.file, 'nipponbid/documents');
-    const [result] = await db.query(
-      'INSERT INTO documents (purchase_id, user_id, car_id, name, type, url, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.params.id, purchase[0].user_id, purchase[0].car_id,
-       name || req.file.originalname, type || 'user_and_admin', fileUrl, req.user.id]
-    );
+    const docs = [];
+    for (const file of req.files) {
+      const fileUrl = await resolveUploadedFile(file, 'nipponbid/documents');
+      const docName = (req.files.length === 1 && name) ? name : file.originalname;
+      const [result] = await db.query(
+        'INSERT INTO documents (purchase_id, user_id, car_id, name, type, url, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [req.params.id, purchase[0].user_id, purchase[0].car_id,
+         docName, type || 'user_and_admin', fileUrl, req.user.id]
+      );
+      const [doc] = await db.query('SELECT * FROM documents WHERE document_id = ?', [result.insertId]);
+      docs.push(doc[0]);
+    }
 
-    await notify(purchase[0].user_id, 'New Document Available', `A new document has been uploaded to your purchase.`, 'document', req.params.id);
+    const docWord = docs.length > 1 ? `${docs.length} new documents have` : 'A new document has';
+    await notify(purchase[0].user_id, 'New Document Available', `${docWord} been uploaded to your purchase.`, 'document', req.params.id);
 
-    const [doc] = await db.query('SELECT * FROM documents WHERE document_id = ?', [result.insertId]);
-    res.status(201).json(doc[0]);
+    res.status(201).json(docs.length === 1 ? docs[0] : docs);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

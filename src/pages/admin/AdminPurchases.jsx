@@ -84,7 +84,7 @@ export default function AdminPurchases() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [docName, setDocName] = useState('')
-  const [docFile, setDocFile] = useState(null)
+  const [docFiles, setDocFiles] = useState([])
   const [docType, setDocType] = useState('user_and_admin')
   const [showCreate, setShowCreate] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -307,16 +307,17 @@ export default function AdminPurchases() {
 
   const handleUpload = async (e) => {
     e.preventDefault()
-    if (!docFile || !docName) return toast.error('Name and file required')
+    if (!docFiles.length) return toast.error('Select at least one file')
+    if (docFiles.length === 1 && !docName) return toast.error('Name and file required')
     setUploading(true)
     const fd = new FormData()
-    fd.append('document', docFile)
-    fd.append('name', docName)
+    docFiles.forEach(f => fd.append('documents', f))
+    if (docName) fd.append('name', docName)
     fd.append('type', docType)
     try {
       await uploadDocument(selected.purchase_id, fd)
-      toast.success('Document uploaded')
-      setDocName(''); setDocFile(null); setDocType('user_and_admin')
+      toast.success(docFiles.length > 1 ? `${docFiles.length} documents uploaded` : 'Document uploaded')
+      setDocName(''); setDocFiles([]); setDocType('user_and_admin')
       reloadDetail()
     } catch { toast.error('Upload failed') }
     finally { setUploading(false) }
@@ -669,10 +670,10 @@ export default function AdminPurchases() {
               </div>
 
               <form onSubmit={handleUpload} className="space-y-3 border-t border-grey-200 pt-4">
-                <p className="text-xs font-bold text-grey-500">Upload Document</p>
+                <p className="text-xs font-bold text-grey-500">Upload Document{docFiles.length > 1 ? 's' : ''}</p>
                 <div>
-                  <label className="label">Document Name</label>
-                  <input className="input" value={docName} onChange={e => setDocName(e.target.value)} placeholder="e.g. BL Document" />
+                  <label className="label">Document Name{docFiles.length > 1 ? ' (ignored — each file keeps its own name)' : ''}</label>
+                  <input className="input" value={docName} onChange={e => setDocName(e.target.value)} placeholder="e.g. BL Document" disabled={docFiles.length > 1} />
                 </div>
                 <div>
                   <label className="label">Visibility</label>
@@ -681,9 +682,17 @@ export default function AdminPurchases() {
                     <option value="admin_only">Admin only</option>
                   </select>
                 </div>
-                <input type="file" className="input text-sm" onChange={e => setDocFile(e.target.files?.[0] || null)} />
+                <input
+                  type="file"
+                  multiple
+                  className="input text-sm"
+                  onChange={e => setDocFiles(Array.from(e.target.files || []))}
+                />
+                {docFiles.length > 1 && (
+                  <p className="text-xs text-grey-400">{docFiles.length} files selected: {docFiles.map(f => f.name).join(', ')}</p>
+                )}
                 <button type="submit" className="btn btn-secondary btn-sm" disabled={uploading}>
-                  <Upload size={13} /> {uploading ? 'Uploading…' : 'Upload'}
+                  <Upload size={13} /> {uploading ? 'Uploading…' : docFiles.length > 1 ? `Upload ${docFiles.length} Files` : 'Upload'}
                 </button>
               </form>
             </div>
