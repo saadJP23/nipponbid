@@ -1,8 +1,15 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllParts, updatePart, exportAllParts, adminCreatePart, getAdminUsers } from '../../services/api'
-import { Package, ChevronLeft, ChevronRight, Download, Save, Plus } from 'lucide-react'
+import { getAllParts, updatePart, exportAllParts, adminCreatePart, getAdminUsers, billPartsClient, billPartsShinchuo } from '../../services/api'
+import { Package, ChevronLeft, ChevronRight, Download, Save, Plus, FileText, ChevronDown } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
+
+const downloadBlob = (data, filename) => {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([data]))
+  a.download = filename
+  a.click()
+}
 
 const fmt = (n) => Number(n || 0).toLocaleString()
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -32,15 +39,22 @@ export default function AdminParts() {
   const [users, setUsers]       = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [createForm, setCreateForm] = useState({
-    user_id: '', part_name: '', part_description: '', platform_name: '', auction_id: '',
+    user_id: '', part_name: '', part_description: '', chassis: '', delivered_to: '', platform_name: '', auction_id: '',
     quantity: '1', bid_price: '', delivery_charges: '', bank_charges: '',
     shinchuo_commission: '', commission: '', delivery_company: '',
     tracking_no: '', delivery_status: 'pending', status: 'pending', admin_note: '',
   })
+  const [userFilter, setUserFilter] = useState('')
+  const [billedFilter, setBilledFilter] = useState('') // '' = all, 'false' = current bill only, 'true' = already billed
+  const [billing, setBilling] = useState(false)
 
-  const load = useCallback((p) => {
+  const load = useCallback((p, uid, billed) => {
     setLoading(true)
-    getAllParts({ page: p, limit: 20 })
+    getAllParts({
+      page: p, limit: 20,
+      ...(uid    ? { user_id: uid }           : {}),
+      ...(billed ? { billed_to_client: billed } : {}),
+    })
       .then(r => {
         setParts(r.data.parts || [])
         setTotal(r.data.total || 0)
@@ -50,7 +64,33 @@ export default function AdminParts() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { load(page) }, [page, load])
+  useEffect(() => { load(page, userFilter, billedFilter) }, [page, userFilter, billedFilter, load])
+
+  const handleUserFilter = (uid) => { setUserFilter(uid); setPage(1) }
+
+  const handleBillClient = async () => {
+    if (!userFilter) return toast.error('Select a client first')
+    setBilling(true)
+    try {
+      const r = await billPartsClient(userFilter)
+      const clientName = users.find(u => u.user_id === Number(userFilter))?.name || 'client'
+      downloadBlob(r.data, `${clientName}-current-bill.xlsx`)
+      toast.success('Client bill generated — those orders are now marked billed')
+      load(page, userFilter, billedFilter)
+    } catch (err) { toast.error(err.response?.data?.message || 'Nothing to bill') }
+    finally { setBilling(false) }
+  }
+
+  const handleBillShinchuo = async () => {
+    setBilling(true)
+    try {
+      const r = await billPartsShinchuo()
+      downloadBlob(r.data, 'shinchuo-current-bill.xlsx')
+      toast.success('Shinchuo bill generated — those orders are now marked billed')
+      load(page, userFilter, billedFilter)
+    } catch (err) { toast.error(err.response?.data?.message || 'Nothing to bill') }
+    finally { setBilling(false) }
+  }
 
   useEffect(() => {
     getAdminUsers({ limit: 200 }).then(r => setUsers(r.data.users || [])).catch(() => {})
@@ -66,12 +106,12 @@ export default function AdminParts() {
       toast.success('Parts order created')
       setShowCreate(false)
       setCreateForm({
-        user_id: '', part_name: '', part_description: '', platform_name: '', auction_id: '',
+        user_id: '', part_name: '', part_description: '', chassis: '', delivered_to: '', platform_name: '', auction_id: '',
         quantity: '1', bid_price: '', delivery_charges: '', bank_charges: '',
         shinchuo_commission: '', commission: '', delivery_company: '',
         tracking_no: '', delivery_status: 'pending', status: 'pending', admin_note: '',
       })
-      load(page)
+      load(page, userFilter, billedFilter)
     } catch (err) { toast.error(err.response?.data?.message || 'Failed') }
     finally { setSubmitting(false) }
   }
@@ -91,13 +131,18 @@ export default function AdminParts() {
       commission:          p.commission          ?? '',
       part_name:           p.part_name           || '',
       part_description:    p.part_description    || '',
+      chassis:             p.chassis             || '',
+      delivered_to:        p.delivered_to        || '',
       platform_name:       p.platform_name       || '',
       auction_id:          p.auction_id          || '',
       quantity:            p.quantity            ?? 1,
+      billed_to_client:    !!p.billed_to_client,
+      billed_to_shinchuo:  !!p.billed_to_shinchuo,
     })
   }
 
   const setF = (k) => (e) => setEditForm(f => ({ ...f, [k]: e.target.value }))
+  const setFCheck = (k) => (e) => setEditForm(f => ({ ...f, [k]: e.target.checked }))
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -114,7 +159,7 @@ export default function AdminParts() {
       })
       toast.success('Updated')
       setSelected(null)
-      load(page)
+      load(page, userFilter, billedFilter)
     } catch { toast.error('Failed to update') }
     finally { setSaving(false) }
   }
@@ -135,14 +180,43 @@ export default function AdminParts() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Parts Orders</h1>
-            <p className="page-subtitle">{fmt(total)} orders</p>
+            <p className="page-subtitle">
+              {fmt(total)} orders
+              {userFilter ? ` · ${users.find(u => u.user_id === Number(userFilter))?.name}` : ''}
+              {billedFilter === 'false' ? ' · Current Bill only' : billedFilter === 'true' ? ' · Already billed' : ''}
+            </p>
           </div>
-          <button className="btn btn-secondary" onClick={handleExport} disabled={parts.length === 0}>
-            <Download size={15} /> Export Excel
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            <Plus size={15} /> Add Manual
-          </button>
+          <div className="flex gap-2 items-center flex-wrap justify-end">
+            <div className="relative">
+              <select className="input pr-8 appearance-none min-w-[170px]" value={userFilter} onChange={e => handleUserFilter(e.target.value)}>
+                <option value="">All Users</option>
+                {users.filter(u => u.role !== 'admin').map(u => (
+                  <option key={u.user_id} value={u.user_id}>{u.name} ({u.country || 'N/A'})</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-grey-400 pointer-events-none" />
+            </div>
+            <div className="relative">
+              <select className="input pr-8 appearance-none min-w-[150px]" value={billedFilter} onChange={e => { setBilledFilter(e.target.value); setPage(1) }}>
+                <option value="">All (billed + current)</option>
+                <option value="false">Current Bill only</option>
+                <option value="true">Already billed</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-grey-400 pointer-events-none" />
+            </div>
+            <button className="btn btn-secondary" onClick={handleExport} disabled={parts.length === 0}>
+              <Download size={15} /> Export Excel
+            </button>
+            <button className="btn btn-secondary" onClick={handleBillClient} disabled={billing || !userFilter} title={!userFilter ? 'Select a client first' : ''}>
+              <FileText size={15} /> Generate Client Bill
+            </button>
+            <button className="btn btn-secondary" onClick={handleBillShinchuo} disabled={billing}>
+              <FileText size={15} /> Generate Shinchuo Bill
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              <Plus size={15} /> Add Manual
+            </button>
+          </div>
         </div>
 
         <div className="card">
@@ -160,11 +234,13 @@ export default function AdminParts() {
                   <th>Date</th>
                   <th>User</th>
                   <th>Part Name</th>
+                  <th>Chassis</th>
                   <th>Platform</th>
                   <th>Bid Price</th>
                   <th>Tracking No.</th>
                   <th>Status</th>
                   <th>Delivery</th>
+                  <th>Billed</th>
                 </tr></thead>
                 <tbody>
                   {parts.map(p => (
@@ -178,11 +254,16 @@ export default function AdminParts() {
                         <p className="font-semibold text-navy">{p.part_name}</p>
                         <p className="text-xs text-grey-400 truncate max-w-[180px]">{p.part_description || '—'}</p>
                       </td>
+                      <td className="font-mono text-xs">{p.chassis || '—'}</td>
                       <td>{p.platform_name || '—'}</td>
                       <td className="font-mono font-semibold">{p.bid_price != null ? `¥ ${fmt(p.bid_price)}` : '—'}</td>
                       <td className="font-mono text-xs">{p.tracking_no || '—'}</td>
                       <td><span className={`badge ${STATUS_BADGE[p.status] || 'badge-grey'}`}>{p.status}</span></td>
                       <td><span className={`badge ${STATUS_BADGE[p.delivery_status] || 'badge-grey'}`}>{p.delivery_status || 'pending'}</span></td>
+                      <td className="whitespace-nowrap">
+                        <span className={`badge ${p.billed_to_client ? 'badge-green' : 'badge-amber'} mr-1`}>client {p.billed_to_client ? '✓' : '—'}</span>
+                        <span className={`badge ${p.billed_to_shinchuo ? 'badge-green' : 'badge-amber'}`}>shinchuo {p.billed_to_shinchuo ? '✓' : '—'}</span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -226,6 +307,14 @@ export default function AdminParts() {
             <div className="col-span-2">
               <label className="label">Description</label>
               <input className="input" value={createForm.part_description} onChange={setC('part_description')} placeholder="e.g. Head Light for Honda FIT" />
+            </div>
+            <div>
+              <label className="label">Chassis</label>
+              <input className="input" value={createForm.chassis} onChange={setC('chassis')} placeholder="e.g. GP5-3010084" />
+            </div>
+            <div>
+              <label className="label">Delivered To</label>
+              <input className="input" value={createForm.delivered_to} onChange={setC('delivered_to')} placeholder="e.g. Aichi yard" />
             </div>
             <div>
               <label className="label">Platform</label>
@@ -336,6 +425,14 @@ export default function AdminParts() {
                   <input className="input" value={editForm.part_description} onChange={setF('part_description')} />
                 </div>
                 <div>
+                  <label className="label">Chassis</label>
+                  <input className="input" value={editForm.chassis} onChange={setF('chassis')} placeholder="e.g. GP5-3010084" />
+                </div>
+                <div>
+                  <label className="label">Delivered To</label>
+                  <input className="input" value={editForm.delivered_to} onChange={setF('delivered_to')} placeholder="e.g. Aichi yard" />
+                </div>
+                <div>
                   <label className="label">Platform</label>
                   <input className="input" value={editForm.platform_name} onChange={setF('platform_name')} />
                 </div>
@@ -406,6 +503,17 @@ export default function AdminParts() {
                 <label className="label">Admin Note</label>
                 <textarea className="input" rows={3} value={editForm.admin_note}
                   onChange={setF('admin_note')} placeholder="Internal note visible to admin only…" />
+              </div>
+
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-grey-600">
+                  <input type="checkbox" checked={editForm.billed_to_client} onChange={setFCheck('billed_to_client')} />
+                  Billed to client
+                </label>
+                <label className="flex items-center gap-2 text-sm text-grey-600">
+                  <input type="checkbox" checked={editForm.billed_to_shinchuo} onChange={setFCheck('billed_to_shinchuo')} />
+                  Billed to Shinchuo
+                </label>
               </div>
 
               <button type="submit" className="btn btn-primary w-full" disabled={saving}>

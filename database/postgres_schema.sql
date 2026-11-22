@@ -316,6 +316,8 @@ CREATE TABLE parts_purchases (
   type                 VARCHAR(20) CHECK (type IN ('online','manufacturer')),
   part_name            VARCHAR(255) NOT NULL,
   part_description     TEXT,
+  chassis              VARCHAR(100),
+  delivered_to         VARCHAR(200),
   platform_name        VARCHAR(100),
   auction_id           VARCHAR(100),
   quantity             INTEGER NOT NULL DEFAULT 1,
@@ -328,6 +330,8 @@ CREATE TABLE parts_purchases (
   tracking_no          VARCHAR(200),
   delivery_status      VARCHAR(50) DEFAULT 'pending',
   status               VARCHAR(50) DEFAULT 'pending',
+  billed_to_client     BOOLEAN NOT NULL DEFAULT false,
+  billed_to_shinchuo   BOOLEAN NOT NULL DEFAULT false,
   admin_note           TEXT,
   created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
