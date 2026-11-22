@@ -138,7 +138,7 @@ router.put('/:id', adminAuth, async (req, res) => {
     const { status, delivery_status, tracking_no, delivery_company, admin_note,
             delivery_charges, bank_charges, shinchuo_commission, commission,
             part_name, part_description, chassis, delivered_to, platform_name, auction_id, quantity, bid_price,
-            billed_to_client, billed_to_shinchuo } = req.body;
+            billed_to_client, billed_to_shinchuo, created_at } = req.body;
     const [existing] = await db.query('SELECT * FROM parts_purchases WHERE parts_purchase_id = ?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ message: 'Parts order not found' });
 
@@ -147,7 +147,7 @@ router.put('/:id', adminAuth, async (req, res) => {
         status=?, delivery_status=?, tracking_no=?, delivery_company=?, admin_note=?,
         delivery_charges=?, bank_charges=?, shinchuo_commission=?, commission=?,
         part_name=?, part_description=?, chassis=?, delivered_to=?, platform_name=?, auction_id=?, quantity=?, bid_price=?,
-        billed_to_client=?, billed_to_shinchuo=?
+        billed_to_client=?, billed_to_shinchuo=?, created_at=?
        WHERE parts_purchase_id=?`,
       [status || existing[0].status,
        delivery_status || existing[0].delivery_status,
@@ -168,6 +168,7 @@ router.put('/:id', adminAuth, async (req, res) => {
        bid_price ?? existing[0].bid_price,
        billed_to_client ?? existing[0].billed_to_client,
        billed_to_shinchuo ?? existing[0].billed_to_shinchuo,
+       created_at || existing[0].created_at,
        req.params.id]
     );
 

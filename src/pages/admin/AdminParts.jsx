@@ -3,6 +3,7 @@ import { getAllParts, updatePart, exportAllParts, adminCreatePart, getAdminUsers
 import { Package, ChevronLeft, ChevronRight, Download, Save, Plus, FileText, ChevronDown } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
+import { toDateInputValue } from '../../utils/dates'
 
 const downloadBlob = (data, filename) => {
   const a = document.createElement('a')
@@ -138,6 +139,7 @@ export default function AdminParts() {
       platform_name:       p.platform_name       || '',
       auction_id:          p.auction_id          || '',
       quantity:            p.quantity            ?? 1,
+      created_at:          toDateInputValue(p.created_at),
       billed_to_client:    !!p.billed_to_client,
       billed_to_shinchuo:  !!p.billed_to_shinchuo,
     })
@@ -452,6 +454,10 @@ export default function AdminParts() {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400 text-sm">¥</span>
                     <input className="input pl-7 font-mono" type="number" min="0" value={editForm.bid_price} onChange={setF('bid_price')} />
                   </div>
+                </div>
+                <div>
+                  <label className="label">Date</label>
+                  <input className="input" type="date" value={editForm.created_at} onChange={setF('created_at')} />
                 </div>
               </div>
 
