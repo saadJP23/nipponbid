@@ -40,24 +40,47 @@ router.get('/my', auth, async (req, res) => {
 // here even before anyone has saved shipping info for it.
 router.get('/', adminAuth, async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, search, user_id } = req.query;
+    let where = '1=1';
+    const params = [];
+    if (user_id) { where += ' AND p.user_id = ?'; params.push(user_id); }
+    if (search) {
+      where += ` AND (
+        c.chassis_no LIKE ? OR c.make LIKE ? OR c.model LIKE ? OR
+        u.name LIKE ? OR p.lot_no LIKE ? OR p.file_code_no LIKE ? OR
+        s.ship_name LIKE ? OR s.voyage LIKE ?
+      )`;
+      const q = `%${search}%`;
+      params.push(q, q, q, q, q, q, q, q);
+    }
     const offset = (page - 1) * limit;
-    const [[{ total }]] = await db.query('SELECT COUNT(*) as total FROM purchases');
-    const [rows] = await db.query(
-      `SELECT p.purchase_id, p.file_code_no, p.lot_no, p.destination,
-              c.make, c.model, c.year, c.chassis_no,
-              u.name AS user_name, u.country AS user_country,
-              s.shipping_id, s.shipping_company, s.ship_name, s.voyage, s.route,
-              s.etd, s.eta, s.result_of_inspection,
-              bl.port_of_loading, bl.port_of_discharge, bl.status AS bl_status
-       FROM purchases p
+    const [[{ total }]] = await db.query(
+      `SELECT COUNT(*) as total FROM purchases p
        JOIN cars c ON c.car_id = p.car_id
        JOIN users u ON u.user_id = p.user_id
        LEFT JOIN shipping s ON s.purchase_id = p.purchase_id
+       WHERE ${where}`,
+      params
+    );
+    const [rows] = await db.query(
+      `SELECT p.purchase_id, p.file_code_no, p.lot_no, p.destination,
+              c.make, c.model, c.year, c.chassis_no,
+              ci.url AS car_image,
+              u.name AS user_name, u.country AS user_country,
+              s.shipping_id, s.shipping_company, s.ship_name, s.voyage, s.route,
+              s.etd, s.eta, s.result_of_inspection,
+              bl.port_of_loading, bl.port_of_discharge, bl.status AS bl_status,
+              (SELECT COUNT(*) FROM documents d WHERE d.purchase_id = p.purchase_id) AS doc_count
+       FROM purchases p
+       JOIN cars c ON c.car_id = p.car_id
+       JOIN users u ON u.user_id = p.user_id
+       LEFT JOIN car_images ci ON ci.car_id = c.car_id AND ci.is_primary = 1
+       LEFT JOIN shipping s ON s.purchase_id = p.purchase_id
        LEFT JOIN bl ON bl.shipping_id = s.shipping_id
+       WHERE ${where}
        ORDER BY p.created_at DESC
        LIMIT ? OFFSET ?`,
-      [parseInt(limit), offset]
+      [...params, parseInt(limit), offset]
     );
     res.json({ shipments: rows, total, page: parseInt(page), pages: Math.ceil(total / limit) });
   } catch (err) {

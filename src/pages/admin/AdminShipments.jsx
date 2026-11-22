@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getAllShipments, getShipment, updateShipment, uploadShipmentDoc, deleteShipmentDoc, resolveImageUrl } from '../../services/api'
-import { Ship, ChevronLeft, ChevronRight, Upload, FileText, Trash2 } from 'lucide-react'
+import { getAllShipments, getShipment, updateShipment, uploadShipmentDoc, deleteShipmentDoc, resolveImageUrl, getAdminUsers } from '../../services/api'
+import { Ship, ChevronLeft, ChevronRight, Upload, FileText, Trash2, ChevronDown, Search, X } from 'lucide-react'
 import Drawer from '../../components/Drawer'
 import toast from 'react-hot-toast'
 import { toDateInputValue } from '../../utils/dates'
@@ -22,16 +22,44 @@ export default function AdminShipments() {
   const [submitting, setSubmitting] = useState(false)
   const [docFile, setDocFile] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [users, setUsers] = useState([])
+  const [userFilter, setUserFilter] = useState('')
+  const [search, setSearch] = useState(() => sessionStorage.getItem('shipments_search') || '')
+  const [searchInput, setSearchInput] = useState(() => sessionStorage.getItem('shipments_search') || '')
 
-  const load = useCallback((p) => {
+  useEffect(() => {
+    getAdminUsers({ limit: 200 }).then(r => setUsers(r.data.users || [])).catch(() => {})
+  }, [])
+
+  const load = useCallback((p, uid, q) => {
     setLoading(true)
-    getAllShipments({ page: p, limit: 15 })
+    getAllShipments({
+      page: p, limit: 15,
+      ...(uid ? { user_id: uid } : {}),
+      ...(q  ? { search: q }    : {}),
+    })
       .then(r => { setShipments(r.data.shipments || []); setTotal(r.data.total || 0); setPages(r.data.pages || 1) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { load(page) }, [page, load])
+  useEffect(() => { load(page, userFilter, search) }, [page, userFilter, search, load])
+
+  const handleUserFilter = (uid) => { setUserFilter(uid); setPage(1) }
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    sessionStorage.setItem('shipments_search', searchInput)
+    setSearch(searchInput)
+    setPage(1)
+  }
+
+  const handleResetSearch = () => {
+    sessionStorage.removeItem('shipments_search')
+    setSearch('')
+    setSearchInput('')
+    setPage(1)
+  }
 
   const applyDetail = (s) => {
     setSelected(s)
@@ -105,7 +133,43 @@ export default function AdminShipments() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Shipments</h1>
-            <p className="page-subtitle">{fmt(total)} records</p>
+            <p className="page-subtitle">
+              {fmt(total)} records
+              {userFilter ? ` · ${users.find(u => u.user_id === Number(userFilter))?.name}` : ''}
+              {search ? ` · "${search}"` : ''}
+            </p>
+          </div>
+          <div className="flex gap-2 items-center flex-wrap justify-end">
+            <form onSubmit={handleSearch} className="flex gap-1">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-grey-400" />
+                <input
+                  className="input pl-8 min-w-[220px]"
+                  placeholder="Chassis, lot, ship, voyage…"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                />
+              </div>
+              <button type="submit" className="btn btn-secondary">Search</button>
+              {search && (
+                <button type="button" className="btn btn-secondary text-red-500" onClick={handleResetSearch}>
+                  <X size={14} /> Reset
+                </button>
+              )}
+            </form>
+            <div className="relative">
+              <select
+                className="input pr-8 appearance-none min-w-[180px]"
+                value={userFilter}
+                onChange={e => handleUserFilter(e.target.value)}
+              >
+                <option value="">All Users</option>
+                {users.map(u => (
+                  <option key={u.user_id} value={u.user_id}>{u.name} ({u.country || 'N/A'})</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-grey-400 pointer-events-none" />
+            </div>
           </div>
         </div>
 
@@ -128,6 +192,7 @@ export default function AdminShipments() {
                   <th>ETD</th>
                   <th>ETA</th>
                   <th>BL</th>
+                  <th>Docs</th>
                 </tr></thead>
                 <tbody>
                   {shipments.map(s => (
@@ -157,6 +222,11 @@ export default function AdminShipments() {
                       <td>{fmtDate(s.etd)}</td>
                       <td>{fmtDate(s.eta)}</td>
                       <td><span className={`badge ${BL_BADGE[s.bl_status] || 'badge-grey'}`}>{s.bl_status || 'pending'}</span></td>
+                      <td>
+                        <span className={`badge ${Number(s.doc_count) > 0 ? 'badge-blue' : 'badge-grey'} inline-flex items-center gap-1`}>
+                          <FileText size={11} /> {s.doc_count || 0}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -409,6 +409,7 @@ export default function AdminPurchases() {
                   <th>Date</th>
                   <th>Total</th>
                   <th>Invoice No.</th>
+                  <th>Docs</th>
                   <th></th>
                 </tr></thead>
                 <tbody>
@@ -435,6 +436,11 @@ export default function AdminPurchases() {
                       <td>{fmtDate(p.auction_date)}</td>
                       <td className="font-mono font-semibold">¥ {fmt(p.purchase_total)}</td>
                       <td className="font-mono text-xs">{p.pro_invoice_no || '—'}</td>
+                      <td>
+                        <span className={`badge ${Number(p.doc_count) > 0 ? 'badge-blue' : 'badge-grey'} inline-flex items-center gap-1`}>
+                          <FileText size={11} /> {p.doc_count || 0}
+                        </span>
+                      </td>
                       <td>
                         <button
                           className="btn-icon text-grey-400 hover:text-red"
