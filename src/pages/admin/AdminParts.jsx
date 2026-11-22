@@ -23,6 +23,8 @@ const STATUS_BADGE = {
   cancelled:  'badge-red',
 }
 
+const PLATFORM_OPTIONS = ['Yahoo Auction', 'Yahoo Shopping', 'Mercari', 'Furima', 'Amazon']
+
 const STATUSES        = ['pending', 'processing', 'ordered', 'shipped', 'delivered', 'cancelled']
 const DELIVERY_STATUSES = ['pending', 'shipped', 'delivered', 'cancelled']
 
@@ -318,7 +320,7 @@ export default function AdminParts() {
             </div>
             <div>
               <label className="label">Platform</label>
-              <input className="input" value={createForm.platform_name} onChange={setC('platform_name')} placeholder="e.g. Yahoo Auction" />
+              <input className="input" list="platform-options" value={createForm.platform_name} onChange={setC('platform_name')} placeholder="e.g. Yahoo Auction" />
             </div>
             <div>
               <label className="label">Auction ID</label>
@@ -434,7 +436,7 @@ export default function AdminParts() {
                 </div>
                 <div>
                   <label className="label">Platform</label>
-                  <input className="input" value={editForm.platform_name} onChange={setF('platform_name')} />
+                  <input className="input" list="platform-options" value={editForm.platform_name} onChange={setF('platform_name')} />
                 </div>
                 <div>
                   <label className="label">Auction ID</label>
@@ -523,6 +525,10 @@ export default function AdminParts() {
           </div>
         )}
       </Drawer>
+
+      <datalist id="platform-options">
+        {PLATFORM_OPTIONS.map(p => <option key={p} value={p} />)}
+      </datalist>
     </>
   )
 }

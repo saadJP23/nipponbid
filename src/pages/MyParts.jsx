@@ -16,6 +16,8 @@ const STATUS_BADGE = {
   cancelled: 'badge-red',
 }
 
+const PLATFORM_OPTIONS = ['Yahoo Auction', 'Yahoo Shopping', 'Mercari', 'Furima', 'Amazon']
+
 export default function MyParts() {
   const [parts, setParts] = useState([])
   const [total, setTotal] = useState(0)
@@ -188,7 +190,7 @@ export default function MyParts() {
             </div>
             <div>
               <label className="label">Platform</label>
-              <input className="input" placeholder="e.g. Yahoo Auction" value={form.platform_name}
+              <input className="input" list="platform-options" placeholder="e.g. Yahoo Auction" value={form.platform_name}
                 onChange={e => setForm(f => ({ ...f, platform_name: e.target.value }))} />
             </div>
             <div>
@@ -210,6 +212,10 @@ export default function MyParts() {
           </div>
         </form>
       </Drawer>
+
+      <datalist id="platform-options">
+        {PLATFORM_OPTIONS.map(p => <option key={p} value={p} />)}
+      </datalist>
     </>
   )
 }
