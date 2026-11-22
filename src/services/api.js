@@ -25,10 +25,16 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const AUTH_ENDPOINTS = ['/auth/login', '/auth/register'];
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const isAuthRequest = AUTH_ENDPOINTS.some(p => err.config?.url?.includes(p));
+    // A 401 from login/register just means "wrong credentials" — let the form
+    // show that error instead of force-redirecting, which would otherwise wipe
+    // out the toast before the user ever sees it.
+    if (err.response?.status === 401 && !isAuthRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
